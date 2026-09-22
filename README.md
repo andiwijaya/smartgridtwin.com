@@ -2,6 +2,8 @@
 
 Static editorial foundation for SmartGridTwin.com. The site is intentionally dependency-light: semantic HTML, responsive CSS, and minimal JavaScript are ready for deployment through GitHub and Cloudflare Pages.
 
+Production deploys follow the `main` branch through the dedicated Cloudflare Pages project `smartgridtwin-com`.
+
 ## Local preview
 
 Open `index.html` directly, or serve this folder with any static web server.
