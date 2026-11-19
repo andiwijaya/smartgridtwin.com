@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   BASELINE_PEAK_W, BATTERY_CAPACITY_WH, DAY_TICKS, EV_TARGET_WH, initialGridState, isGridState, stepGrid,
 } from '../play/microgrid.mjs';
-import {openGridSession, pilotDatabase, STEP_MS} from '../play/session.mjs';
+import {gridDatabase, openGridSession, PROGRESS_DATABASE, STEP_MS} from '../play/session.mjs';
 
 function memoryStore() {
   let record = null;
@@ -84,13 +84,19 @@ test('checkpoint halfway through the day reopens at exactly the same time and re
   assert.equal(restored.snapshot().tick, 48);
 });
 
-test('only an explicit isolated QA namespace can be opened on a loopback origin', () => {
-  assert.equal(pilotDatabase(new URL('http://127.0.0.1:4192/play/?qa-session=manual-clock')),
-    'smartgridtwin.qa.microgrid.v1-manual-clock');
+test('the ordinary route and named QA sessions use separate database names', () => {
+  assert.equal(gridDatabase(new URL('https://smartgridtwin.com/play/')), PROGRESS_DATABASE);
+  assert.equal(gridDatabase(new URL('http://127.0.0.1:4192/play/')), PROGRESS_DATABASE);
+  for (const origin of ['http://127.0.0.1:4192', 'https://test-run.smartgridtwin-com.pages.dev']) {
+    assert.equal(gridDatabase(new URL('/play/?qa-session=manual-clock', origin)),
+      'smartgridtwin.qa.microgrid.v1-manual-clock');
+  }
   for (const url of [
     'https://smartgridtwin.com/play/?qa-session=manual-clock',
-    'http://127.0.0.1:4192/play/',
+    'https://www.smartgridtwin.com/play/?qa-session=manual-clock',
+    'https://smartgridtwin-com.pages.dev/play/?qa-session=manual-clock',
+    'https://test-run.smartgridtwin-com.pages.dev.invalid/play/?qa-session=manual-clock',
     'http://127.0.0.1:4192/play/?qa-session=bad',
     'http://127.0.0.1:4192/play/?qa-session=manual-clock&qa-session=other-slot',
-  ]) assert.equal(pilotDatabase(new URL(url)), null);
+  ]) assert.equal(gridDatabase(new URL(url)), null);
 });

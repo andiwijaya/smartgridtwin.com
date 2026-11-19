@@ -3,16 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
-  <title>SmartGridTwin | Pilot Mikrogrid</title>
+  <title>SmartGridTwin | Simulasi Mikrogrid</title>
   <link rel="stylesheet" href="./pilot.css">
-  <script type="importmap">{"imports":{"@andiwijaya/common-engine":"./engine/index.js","three":"./vendor/three.module.js"}}</script>
   <script type="module" src="./pilot.mjs"></script>
 </head>
 <body>
   <header class="site-head">
-    <strong class="brand">SmartGrid<span>Twin</span></strong>
-    <span id="qa-slot" class="slot">Pilot lokal</span>
+    <a class="brand" href="/">SmartGrid<span>Twin</span></a>
+    <span id="qa-slot" class="slot" hidden></span>
   </header>
   <main id="pilot" data-phase="loading">
     <header class="intro">
@@ -71,7 +69,7 @@
             </form>
           </div>
         </fieldset>
-        <p id="status" class="status" role="status">Membuka database QA…</p>
+        <p id="status" class="status" role="status">Membuka progres…</p>
         <div class="recovery">
           <button id="retry" type="button" hidden>Coba lagi simpan</button>
           <button id="reload" type="button" hidden>Muat ulang checkpoint</button>

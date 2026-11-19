@@ -1,6 +1,6 @@
 import {createDioramaNavigation, createIndexedDbCheckpointStore} from '@andiwijaya/common-engine';
 import {BASELINE_PEAK_W, BATTERY_CAPACITY_WH, DAY_TICKS, EV_TARGET_WH} from './microgrid.mjs';
-import {openGridSession, pilotDatabase} from './session.mjs';
+import {gridDatabase, openGridSession} from './session.mjs';
 
 const get = id => document.getElementById(id);
 const pilot = get('pilot');
@@ -37,21 +37,26 @@ const messages = {
 };
 
 async function boot() {
-  const database = pilotDatabase(new URL(location.href));
+  const url = new URL(location.href);
+  const database = gridDatabase(url);
   if (!database) {
     pilot.dataset.phase = 'blocked';
-    status.textContent = 'Buka lewat preview lokal dengan nama sesi QA yang valid.';
+    status.textContent = 'Buka sesi QA dengan nama yang valid pada alamat preview.';
     return;
   }
 
-  const slot = new URL(location.href).searchParams.get('qa-session');
-  get('qa-slot').textContent = 'QA lokal · ' + slot;
+  const slot = url.searchParams.get('qa-session');
+  if (slot) {
+    const badge = get('qa-slot');
+    badge.textContent = 'QA · ' + slot;
+    badge.hidden = false;
+  }
   let session;
   try {
     session = await openGridSession(createIndexedDbCheckpointStore(indexedDB, database));
   } catch {
     pilot.dataset.phase = 'blocked';
-    status.textContent = 'Checkpoint QA tidak bisa dibuka. Coba muat ulang atau buka sesi QA baru.';
+    status.textContent = 'Progres di perangkat ini tidak bisa dibuka. Coba muat ulang halaman.';
     return;
   }
 
@@ -254,7 +259,9 @@ async function boot() {
   session.setPaused(document.hidden);
   syncPlanInputs();
   const {revision} = session.inspect();
-  status.textContent = revision === null ? 'Sesi QA baru. Waktu dijeda.' : 'Checkpoint revisi ' + revision + ' dibuka. Waktu dijeda.';
+  status.textContent = revision === null
+    ? 'Simulasi siap. Waktu dijeda.'
+    : 'Checkpoint revisi ' + revision + ' dibuka. Waktu dijeda.';
   render();
   renderWorld();
   for (const device of devices.values()) device.button.disabled = false;

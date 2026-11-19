@@ -1,12 +1,12 @@
 # SmartGridTwin.com
 
-Static editorial foundation for SmartGridTwin.com. The site is intentionally dependency-light: semantic HTML, responsive CSS, and minimal JavaScript are ready for deployment through GitHub and Cloudflare Pages.
+SmartGridTwin.com pairs its field guides with a playable microgrid simulator at `/play/`.
 
-Production deploys follow the `main` branch through the dedicated Cloudflare Pages project `smartgridtwin-com`.
+Production deploys use the tested build of a `main` commit from private Common Engine CI. Upload the build's `dist` directory to the existing `smartgridtwin-com` Cloudflare Pages project. Check `/release.json` for the deployed commit and Common Engine version.
 
 ## Local preview
 
-Open `index.html` directly, or serve this folder with any static web server.
+Install with `npm ci`, then run `npm run build` and `npm run qa`. The loopback server serves the same static files used for deployment.
 
 ## Structure
 
@@ -17,14 +17,14 @@ Open `index.html` directly, or serve this folder with any static web server.
 - `smartgrid-hero.png` — approved production hero asset
 - `robots.txt` and `sitemap.xml` — SEO foundation
 
-## Local Common Engine pilot
+## SmartGridTwin simulator
 
-The QA-only route `/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. The pilot uses the pinned Common Engine 0.3.0 package for manual steps, autoplay, transactional plan changes, and diorama view history.
+`/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. Common Engine 0.3.0 provides manual steps, autoplay, transactional plan changes, and diorama view history.
 
-The pilot pins `@andiwijaya/common-engine@0.3.0` from private GitHub Packages. Authenticate with `npm login --scope=@andiwijaya --auth-type=legacy --registry=https://npm.pkg.github.com` and a GitHub personal access token (classic) with `read:packages` and access to the package. In this checkout, use `npm ci`, `npm test`, and `npm run qa`. Open [the local pilot](http://127.0.0.1:4192/play/?qa-session=smartgrid-local). Choose a new `qa-session` slug for a fresh scenario and use the same slug to test conflict or reopening. The route requires a loopback origin and an explicit QA slug.
+Private CI installs `@andiwijaya/common-engine@0.3.0` from GitHub Packages with the workflow's read-only token. Local development requires package read access for `npm ci`. The public route stores progress in the browser on the current origin. Named QA sessions are available on loopback and deployment-specific SmartGridTwin Pages preview addresses, each with its own IndexedDB database. Open [the local QA session](http://127.0.0.1:4192/play/?qa-session=smartgrid-local) after starting the server.
 
 Autoplay begins stopped. Accepted plan changes are durable immediately. Use **Simpan checkpoint** to save tick progress between actions. At 24:00, compare the EV target and peak import to the built-in reference schedule. This baseline uses a fixed demand and solar profile for a repeatable comparison.
 
 In **Utuh**, select **Charger EV** or **Baterai** in the diorama or use its button. The selected device opens its existing schedule or battery mode form. Use **Simpan jadwal EV** or **Simpan mode baterai** to commit the change. **Kembali** restores the previous camera pose, scroll position, and focus. Both buttons also work if WebGL is unavailable.
 
-For browser regression, keep the local QA server running and set `SMARTGRID_QA_PLAYWRIGHT` to an installed Playwright `index.mjs`. Set `SMARTGRID_QA_CHROMIUM` to a local Chrome executable if needed. Run `npm run test:browser` to check both device flows with model selection, keyboard navigation, portrait and landscape touch, and pose restoration. The combined scenario saves both settings in one QA session, saves a checkpoint at tick 48, and reopens the same QA slot in a new tab. It checks both forms, the clock, and the stored checkpoint. The 96-tick manual and autoplay comparison, stale-tab conflict, and failed save with retry also start by selecting the models in the diorama. An optional `SMARTGRID_QA_EVIDENCE` directory receives the screenshots.
+Run `npm test` for simulation and session tests. For browser regression, set `SMARTGRID_QA_PLAYWRIGHT` to an installed Playwright `index.mjs` and run `npm run test:browser`. Set `SMARTGRID_QA_URL` to a Pages preview origin to run the full suite there. Set `SMARTGRID_SMOKE_URL` to check the homepage, field guide, and regular `/play/` route in disposable browser contexts. An optional `SMARTGRID_QA_EVIDENCE` directory receives the screenshots.

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import {isPilotOrigin, PROGRESS_DATABASE} from '../play/session.mjs';
 
-const origin = new URL(process.env.SMARTGRID_QA_URL ?? 'http://127.0.0.1:4192');
-if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1') throw Error('Use the loopback pilot server');
+const smoke = process.env.SMARTGRID_SMOKE_URL;
+const origin = new URL(smoke ?? process.env.SMARTGRID_QA_URL ?? 'http://127.0.0.1:4192');
+const production = origin.protocol === 'https:' && ['smartgridtwin.com', 'www.smartgridtwin.com'].includes(origin.hostname);
+if (!isPilotOrigin(origin) && !(smoke && production)) throw new Error('Use the SmartGridTwin build or a Pages preview.');
 const runtime = process.env.SMARTGRID_QA_PLAYWRIGHT;
 const {chromium} = await import(runtime ? pathToFileURL(runtime).href : 'playwright');
 const browser = await chromium.launch({
@@ -13,14 +17,16 @@ const browser = await chromium.launch({
 });
 const stamp = Date.now().toString(36);
 const slot = name => 'smartgrid-' + name + '-' + stamp;
-const nameFor = id => 'smartgridtwin.qa.microgrid.v1-' + id;
-const locationFor = id => new URL('/play/?qa-session=' + id, origin).href;
+const nameFor = id => id === null ? PROGRESS_DATABASE : 'smartgridtwin.qa.microgrid.v1-' + id;
+const locationFor = id => new URL(id === null ? '/play/' : '/play/?qa-session=' + id, origin).href;
 const evidence = process.env.SMARTGRID_QA_EVIDENCE;
 const report = {};
 
 async function ready(page, id) {
   await page.goto(locationFor(id));
+  assert.equal(page.url(), locationFor(id));
   await page.locator('#pilot[data-phase="ready"]').waitFor();
+  assert.equal(await page.locator('#qa-slot').isVisible(), id !== null);
   await page.bringToFront();
   await worldReady(page, 'overview');
 }
@@ -208,8 +214,7 @@ function checkpointSummary(page) {
   });
 }
 
-async function exerciseCombinedCheckpoint(context, format, touch = false) {
-  const id = slot('s3-combined-' + format);
+async function exerciseCombinedCheckpoint(context, format, touch = false, id = slot('s3-combined-' + format)) {
   const page = await context.newPage();
   let checkpoint, before, overviewPose;
   try {
@@ -280,7 +285,33 @@ async function exerciseCombinedCheckpoint(context, format, touch = false) {
   }
 }
 
-try {
+async function exerciseRelease() {
+  const devices = [
+    {format: 'desktop', viewport: {width: 1360, height: 900}},
+    {format: 'portrait', viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
+  ];
+  const results = [];
+  for (const {format, ...use} of devices) {
+    const context = await browser.newContext(use);
+    try {
+      if (format === 'desktop') {
+        const page = await context.newPage();
+        await page.goto(new URL('/', origin).href);
+        assert.equal(await page.locator('a[href="/play/"]').count(), 1);
+        await page.waitForFunction(() => document.querySelector('.hero-visual img')?.naturalWidth > 0);
+        await page.goto(new URL('/article.html', origin).href);
+        assert.match(await page.locator('article h1').textContent(), /kW vs kWh/);
+        await page.close();
+      }
+      results.push(await exerciseCombinedCheckpoint(context, format, Boolean(use.hasTouch), null));
+    } finally {
+      await context.close();
+    }
+  }
+  console.log(JSON.stringify({homepage: true, article: true, path: '/play/', profiles: results}, null, 2));
+}
+
+async function exerciseQa() {
   const desktop = await browser.newContext({viewport: {width: 1360, height: 900}});
   const errors = [];
   const watch = context => context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
@@ -424,14 +455,31 @@ try {
   assert.match(await failure.locator('#plan-ev').textContent(), /13:00–17:00/);
   assert.equal(await failure.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 
-  const replay = await failure.evaluate(async ({database, actionId}) => {
-    const {createIndexedDbCheckpointStore} = await import('/play/engine/index.js');
-    const {openGridSession} = await import('/play/session.mjs');
-    const session = await openGridSession(createIndexedDbCheckpointStore(indexedDB, database));
-    const same = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 52, endTick: 68});
-    const changed = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 56, endTick: 68});
-    return {same: same.status, changed: changed.reason};
-  }, {database: nameFor(failureId), actionId});
+  const bridge = await build({
+    stdin: {
+      resolveDir: fileURLToPath(new URL('../', import.meta.url)),
+      contents: `
+        import {createIndexedDbCheckpointStore} from '@andiwijaya/common-engine';
+        import {openGridSession} from './play/session.mjs';
+        window.replayQaOperation = async (database, actionId) => {
+          const session = await openGridSession(createIndexedDbCheckpointStore(indexedDB, database));
+          try {
+            const same = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 52, endTick: 68});
+            const changed = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 56, endTick: 68});
+            return {same: same.status, changed: changed.reason};
+          } finally {
+            session.dispose();
+          }
+        };
+      `,
+    },
+    bundle: true,
+    format: 'iife',
+    write: false,
+  });
+  await failure.addScriptTag({content: bridge.outputFiles[0].text});
+  const replay = await failure.evaluate(({database, id}) => window.replayQaOperation(database, id),
+    {database: nameFor(failureId), id: actionId});
   assert.deepEqual(replay, {same: 'replayed', changed: 'operation-id-reused'});
   assert.deepEqual(await record(failure, failureId), after);
   report.retry = {db: nameFor(failureId), tick: after.state.tick, oldRevision: before.revision, revision: after.revision,
@@ -439,19 +487,29 @@ try {
 
   await failure.setViewportSize({width: 844, height: 390});
   assert.equal(await failure.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  const unscoped = await desktop.newPage();
-  await unscoped.goto(new URL('/play/', origin).href);
-  await unscoped.locator('#pilot[data-phase="blocked"]').waitFor();
-  const desktopDatabases = await unscoped.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
+  const ordinary = await desktop.newPage();
+  await ready(ordinary, null);
+  await ordinary.locator('#checkpoint').click();
+  await revision(ordinary, 1);
+  assert.equal((await record(ordinary, null)).state.tick, 0);
+  await ordinary.goto(new URL('/play/?qa-session=bad', origin).href);
+  await ordinary.locator('#pilot[data-phase="blocked"]').waitFor();
+  const desktopDatabases = await ordinary.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
   assert.deepEqual(desktopDatabases.sort(), [
-    desktopCombined.database, ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
+    PROGRESS_DATABASE, desktopCombined.database, ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
   ].sort());
   const mobileDatabases = await failure.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
   assert.deepEqual(mobileDatabases.sort(), [portraitCombined.database, ...portraitNavigation.map(result => result.database), nameFor(failureId)].sort());
-  report.isolation = {desktop: desktopDatabases.length, mobile: mobileDatabases.length, unscoped: 'blocked'};
+  report.isolation = {desktop: desktopDatabases.length, mobile: mobileDatabases.length,
+    ordinaryDatabase: PROGRESS_DATABASE, invalidQaSlot: 'blocked'};
 
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 2));
+}
+
+try {
+  if (smoke) await exerciseRelease();
+  else await exerciseQa();
 } finally {
   await browser.close();
 }
