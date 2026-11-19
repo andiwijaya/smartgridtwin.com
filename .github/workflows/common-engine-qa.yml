@@ -1,0 +1,60 @@
+name: SmartGridTwin QA - Common Engine registry install
+
+on:
+  push:
+    branches:
+      - codex/common-engine-smartgrid-pilot
+
+permissions:
+  contents: read
+  packages: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  registry-qa:
+    if: github.repository == 'andiwijaya/common-engine' && github.event.repository.private
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24.12.0'
+          registry-url: https://npm.pkg.github.com
+          scope: '@andiwijaya'
+          package-manager-cache: false
+      - name: Install from GitHub Packages with an empty npm cache
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          cache_dir=$(mktemp -d "$RUNNER_TEMP/common-engine-npm.XXXXXXXX")
+          install_log="$RUNNER_TEMP/common-engine-npm-ci.log"
+          package_url=$(node -p "require('./package-lock.json').packages['node_modules/@andiwijaya/common-engine'].resolved")
+          npm ci --include=dev --prefer-online --no-audit --no-fund --cache "$cache_dir" --loglevel=http 2>&1 | tee "$install_log"
+          grep -F "GET 200 $package_url" "$install_log"
+          npm ls @andiwijaya/common-engine@0.3.0 --depth=0
+      - name: Run the pilot test suite
+        run: |
+          npm test
+      - name: Install Chromium for QA
+        run: |
+          browser_dir="$RUNNER_TEMP/qa-browser"
+          npm install --prefix "$browser_dir" --no-save --no-audit --no-fund --registry=https://registry.npmjs.org playwright@1.64.1
+          "$browser_dir/node_modules/.bin/playwright" install --with-deps chromium
+          printf '%s\n' "SMARTGRID_QA_PLAYWRIGHT=$browser_dir/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - name: Exercise the pilot in an isolated IndexedDB session
+        run: |
+          preview_log="$RUNNER_TEMP/qa-preview.log"
+          npm run qa > "$preview_log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 15 --retry-connrefused --retry-delay 1 --output /dev/null "http://127.0.0.1:4192/play/"
+          if ! npm run test:browser; then
+            cat "$preview_log" >&2
+            exit 1
+          fi
