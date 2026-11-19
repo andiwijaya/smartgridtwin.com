@@ -19,9 +19,9 @@ Open `index.html` directly, or serve this folder with any static web server.
 
 ## Local Common Engine pilot
 
-The QA-only route `/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. The pilot uses the pinned local Common Engine 0.3.0 package for manual steps, autoplay, transactional plan changes, and diorama view history.
+The QA-only route `/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. The pilot uses the pinned Common Engine 0.3.0 package for manual steps, autoplay, transactional plan changes, and diorama view history.
 
-Build the Common Engine checkout on `codex/smartgrid-transaction-pilot` with `npm ci` and `npm test`. Create `qa` in this checkout, then run `npm pack --pack-destination <smartgrid-checkout>/qa` from the Common Engine checkout. In this checkout, use `npm ci`, `npm test`, and `npm run qa`. Open [the local pilot](http://127.0.0.1:4192/play/?qa-session=smartgrid-local). Choose a new `qa-session` slug for a fresh scenario and use the same slug to test conflict or reopening. The route requires a loopback origin and an explicit QA slug.
+The pilot pins `@andiwijaya/common-engine@0.3.0` from private GitHub Packages. Authenticate with `npm login --scope=@andiwijaya --auth-type=legacy --registry=https://npm.pkg.github.com` and a GitHub personal access token (classic) with `read:packages` and access to the package. In this checkout, use `npm ci`, `npm test`, and `npm run qa`. Open [the local pilot](http://127.0.0.1:4192/play/?qa-session=smartgrid-local). Choose a new `qa-session` slug for a fresh scenario and use the same slug to test conflict or reopening. The route requires a loopback origin and an explicit QA slug.
 
 Autoplay begins stopped. Accepted plan changes are durable immediately. Use **Simpan checkpoint** to save tick progress between actions. At 24:00, compare the EV target and peak import to the built-in reference schedule. This baseline uses a fixed demand and solar profile for a repeatable comparison.
 

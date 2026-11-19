@@ -10,7 +10,7 @@
     "test:browser": "node test/browser-pilot.mjs"
   },
   "dependencies": {
-    "@andiwijaya/common-engine": "file:qa/andiwijaya-common-engine-0.3.0.tgz",
+    "@andiwijaya/common-engine": "0.3.0",
     "three": "0.187.0"
   }
 }
