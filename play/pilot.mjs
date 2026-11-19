@@ -1,4 +1,4 @@
-import {createIndexedDbCheckpointStore} from '@andiwijaya/common-engine';
+import {createDioramaNavigation, createIndexedDbCheckpointStore} from '@andiwijaya/common-engine';
 import {BASELINE_PEAK_W, BATTERY_CAPACITY_WH, DAY_TICKS, EV_TARGET_WH} from './microgrid.mjs';
 import {openGridSession, pilotDatabase} from './session.mjs';
 
@@ -11,6 +11,9 @@ const number = new Intl.NumberFormat('id-ID', {minimumFractionDigits: 2, maximum
 const power = watts => number.format(watts / 1_000) + ' kW';
 const energy = wh => number.format(wh / 1_000) + ' kWh';
 const modeLabel = mode => mode === 'auto' ? 'Isi dari surya, bantu beban' : 'Siaga';
+const OVERVIEW_POSE = {target: [0, .48, 0], height: 11.4, minWidth: 16.7};
+const CHARGER_POSE = {target: [4.25, .65, 1.42], height: 4.65, minWidth: 6.6};
+const CHARGER_ID = 'charger-ev';
 
 const messages = {
   'invalid-schedule': 'Jam selesai harus sesudah jam mulai dan masih berada di depan waktu simulasi.',
@@ -49,6 +52,14 @@ async function boot() {
   let retry = null;
   let plotted = 0;
   const history = get('history');
+  const navigation = createDioramaNavigation(OVERVIEW_POSE);
+  const stage = get('world-stage');
+  const chargerButton = get('world-charger');
+  const backButton = get('world-back');
+  const scheduleForm = get('schedule-form');
+  let diorama;
+  let pageClosed = false;
+  let overviewScroll = 0;
 
   for (let tick = 0; tick <= DAY_TICKS; tick++) {
     if (tick < DAY_TICKS) get('ev-start').add(new Option(time(tick), tick));
@@ -58,6 +69,34 @@ async function boot() {
     get('ev-start').value = String(state.plan.startTick);
     get('ev-end').value = String(state.plan.endTick);
     get('battery-mode').value = state.plan.batteryMode;
+  }
+
+  function renderWorld() {
+    const view = navigation.view();
+    const focused = view.objectId === CHARGER_ID;
+    stage.dataset.view = view.objectId ?? 'overview';
+    get('world-view').textContent = focused ? 'Charger EV' : 'Utuh';
+    chargerButton.setAttribute('aria-expanded', String(focused));
+    scheduleForm.hidden = backButton.hidden = !focused;
+    diorama?.present(view);
+  }
+
+  function openCharger() {
+    if (!navigation.select(CHARGER_ID, CHARGER_POSE)) return;
+    overviewScroll = window.scrollY;
+    renderWorld();
+    const start = get('ev-start');
+    const focus = start.matches(':disabled') ? backButton : start;
+    focus.focus({preventScroll: true});
+    focus.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  }
+
+  function showWorldFallback() {
+    stage.dataset.renderer = 'unavailable';
+    get('world-canvas').hidden = true;
+    get('charger-pin').hidden = true;
+    get('world-fallback').hidden = false;
+    diorama = undefined;
   }
 
   function render() {
@@ -155,7 +194,7 @@ async function boot() {
     render();
   }
 
-  get('schedule-form').addEventListener('submit', event => {
+  scheduleForm.addEventListener('submit', event => {
     event.preventDefault();
     void save({id: crypto.randomUUID(), value: {
       type: 'schedule-ev',
@@ -172,12 +211,21 @@ async function boot() {
   get('checkpoint').addEventListener('click', () => void save(null));
   get('retry').addEventListener('click', () => { if (retry) void save(retry.action); });
   get('reload').addEventListener('click', () => location.reload());
+  chargerButton.addEventListener('click', openCharger);
+  backButton.addEventListener('click', () => {
+    if (!navigation.back()) return;
+    renderWorld();
+    window.scrollTo(0, overviewScroll);
+    chargerButton.focus({preventScroll: true});
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) setPlaying(false);
     else session.setPaused(false);
     render();
   });
   window.addEventListener('pagehide', () => {
+    pageClosed = true;
+    diorama?.dispose();
     cancelAnimationFrame(frameId);
     session.dispose();
   }, {once: true});
@@ -188,6 +236,15 @@ async function boot() {
   const {revision} = session.inspect();
   status.textContent = revision === null ? 'Sesi QA baru. Waktu dijeda.' : 'Checkpoint revisi ' + revision + ' dibuka. Waktu dijeda.';
   render();
+  renderWorld();
+  chargerButton.disabled = false;
+  void import('./diorama.mjs').then(({mountDiorama}) => {
+    if (pageClosed) return;
+    diorama = mountDiorama({
+      stage, canvas: get('world-canvas'), marker: get('charger-pin'), view: navigation.view(),
+      selectCharger: openCharger, unavailable: showWorldFallback,
+    });
+  }).catch(() => { if (!pageClosed) showWorldFallback(); });
 }
 
 void boot();

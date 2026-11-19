@@ -66,6 +66,22 @@ p { margin: 0; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 1rem; }
 .second { margin-top: 1rem; }
 .panel { min-width: 0; padding: clamp(1rem, 3vw, 1.4rem); border: 1px solid var(--line); border-radius: .95rem; background: #fff; }
+.panel-heading { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: .55rem; }
+.panel-heading h2 { margin: 0; }
+.world, .day-details { display: grid; align-content: start; gap: .75rem; }
+.view-label { color: #345845; background: #e7f1e2; border-radius: .35rem; padding: .25rem .55rem; font-size: .8rem; }
+.world-stage { position: relative; height: clamp(280px, 32vw, 375px); overflow: hidden; border-radius: .65rem; background: #e8eee4; }
+.world-stage canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+.world-stage[data-renderer="unavailable"] { display: grid; place-items: center; height: auto; min-height: 6rem; }
+.world-fallback { padding: .8rem; color: var(--muted); text-align: center; }
+.charger-pin {
+  position: absolute; width: 1.45rem; height: 1.45rem;
+  translate: -50% -50%; pointer-events: none;
+  border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px #326947;
+}
+.world-charger { justify-self: start; background: #e7f4dc; border-color: #83a582; }
+.world-charger[aria-expanded="true"] { background: #cfeaae; }
+.schedule-form { display: grid; gap: .5rem; margin-top: .25rem; }
 .map { color: #f6fafd; background: #132a40; border-color: #132a40; }
 .map > p { color: #bcd2de; font-size: .9rem; }
 .assets {
@@ -94,6 +110,7 @@ fieldset { margin: 0; padding: 0; min-width: 0; border: 0; }
 .action p { color: var(--muted); font-size: .84rem; }
 .action label { display: grid; gap: .15rem; font-size: .86rem; font-weight: 600; min-width: 0; }
 .action button { justify-self: start; }
+.operations .status { min-height: 1.35em; }
 .clock-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
 .summary-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr)); gap: .8rem; margin: .8rem 0; }
 .summary-metrics dd { font-size: 1.18rem; }
@@ -110,4 +127,10 @@ fieldset { margin: 0; padding: 0; min-width: 0; border: 0; }
   .intro { flex-wrap: wrap; }
   .clock { width: 100%; grid-template-columns: 1fr auto; align-items: center; gap: .1rem .8rem; }
   .clock strong { grid-column: 2; grid-row: span 2; }
+}
+@media (max-height: 500px) and (min-width: 680px) {
+  .site-head { min-height: 3rem; padding-block: .4rem; }
+  main { padding-block-start: .9rem; }
+  .intro { margin-bottom: .8rem; }
+  .world-stage { height: 235px; }
 }

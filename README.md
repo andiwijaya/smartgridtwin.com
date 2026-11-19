@@ -19,10 +19,12 @@ Open `index.html` directly, or serve this folder with any static web server.
 
 ## Local Common Engine pilot
 
-The QA-only route `/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. The pilot uses the pinned local Common Engine 0.2.0 package for manual steps, autoplay, and transactional changes to the EV schedule and battery mode.
+The QA-only route `/play/` runs a fictional 96-step microgrid day. One step represents 15 minutes. The pilot uses the pinned local Common Engine 0.3.0 package for manual steps, autoplay, transactional plan changes, and diorama view history.
 
 Build the Common Engine checkout on `codex/smartgrid-transaction-pilot` with `npm ci` and `npm test`. Create `qa` in this checkout, then run `npm pack --pack-destination <smartgrid-checkout>/qa` from the Common Engine checkout. In this checkout, use `npm ci`, `npm test`, and `npm run qa`. Open [the local pilot](http://127.0.0.1:4192/play/?qa-session=smartgrid-local). Choose a new `qa-session` slug for a fresh scenario and use the same slug to test conflict or reopening. The route requires a loopback origin and an explicit QA slug.
 
 Autoplay begins stopped. Accepted plan changes are durable immediately. Use **Simpan checkpoint** to save tick progress between actions. At 24:00, compare the EV target and peak import to the built-in reference schedule. This baseline uses a fixed demand and solar profile for a repeatable comparison.
 
-For browser regression, keep the local QA server running and set `SMARTGRID_QA_PLAYWRIGHT` to an installed Playwright `index.mjs`. Set `SMARTGRID_QA_CHROMIUM` to a local Chrome executable if needed. Run `npm run test:browser` to check the 96-tick replay, isolated native IndexedDB, stale tabs, aborted write and retry, durable action replay, and responsive layouts. An optional `SMARTGRID_QA_EVIDENCE` directory receives the desktop and mobile screenshots.
+In **Utuh**, select the charger in the diorama or use the **Charger EV** button to open the schedule form. Use **Simpan jadwal EV** to commit the schedule. **Kembali** restores the previous camera pose, scroll position, and focus. The button also opens the schedule if WebGL is unavailable.
+
+For browser regression, keep the local QA server running and set `SMARTGRID_QA_PLAYWRIGHT` to an installed Playwright `index.mjs`. Set `SMARTGRID_QA_CHROMIUM` to a local Chrome executable if needed. Run `npm run test:browser` to check model selection, keyboard navigation, portrait and landscape touch, pose restoration, the 96-tick replay, two-tab conflicts, aborted writes, and durable action replay. An optional `SMARTGRID_QA_EVIDENCE` directory receives the screenshots.

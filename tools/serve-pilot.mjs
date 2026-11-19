@@ -2,14 +2,17 @@ import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 
 const engine = new URL('./', import.meta.resolve('@andiwijaya/common-engine'));
+const three = new URL('./', import.meta.resolve('three'));
 const play = new URL('../play/', import.meta.url);
 const files = new Map([
   ['/play/', [new URL('index.html', play), 'text/html']],
   ['/play/pilot.css', [new URL('pilot.css', play), 'text/css']],
-  ...['pilot.mjs', 'session.mjs', 'microgrid.mjs'].map(name =>
+  ...['pilot.mjs', 'session.mjs', 'microgrid.mjs', 'diorama.mjs'].map(name =>
     ['/play/' + name, [new URL(name, play), 'text/javascript']]),
-  ...['index.js', 'runtime.js', 'transactional-session.js', 'checkpoint-store.js'].map(name =>
+  ...['index.js', 'runtime.js', 'transactional-session.js', 'checkpoint-store.js', 'diorama-navigation.js'].map(name =>
     ['/play/engine/' + name, [new URL(name, engine), 'text/javascript']]),
+  ...['three.module.js', 'three.core.js'].map(name =>
+    ['/play/vendor/' + name, [new URL(name, three), 'text/javascript']]),
 ]);
 
 const port = Number(process.env.SMARTGRID_QA_PORT ?? '4192');
