@@ -94,14 +94,7 @@ const navigationCases = [
   },
 ];
 
-async function exerciseNavigation(page, id, format, device, touch) {
-  await ready(page, id);
-  const overviewPose = await worldReady(page, 'overview');
-  assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
-  assert.equal(await page.locator(device.form).isVisible(), false);
-  assert.equal(await page.locator(device.otherForm).isVisible(), false);
-  assert.equal(await record(page, id), undefined);
-
+async function selectModel(page, device, touch, checkDrag = false) {
   // The marker identifies where the pointer hits the rendered mesh.
   const marker = page.locator(device.pin);
   await marker.scrollIntoViewIfNeeded();
@@ -112,15 +105,35 @@ async function exerciseNavigation(page, id, format, device, touch) {
   if (touch) {
     await page.touchscreen.tap(x, y);
   } else {
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + 20, y);
-    await page.mouse.move(x, y);
-    await page.mouse.up();
-    assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+    if (checkDrag) {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 20, y);
+      await page.mouse.move(x, y);
+      await page.mouse.up();
+      assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+    }
     await page.mouse.click(x, y);
   }
-  const detailPose = await worldReady(page, device.id);
+  return {detailPose: await worldReady(page, device.id), overviewScroll};
+}
+
+async function backToOverview(page, touch) {
+  const back = page.locator('#world-back');
+  if (touch) await back.tap();
+  else await back.press('Enter');
+  return worldReady(page, 'overview');
+}
+
+async function exerciseNavigation(page, id, format, device, touch) {
+  await ready(page, id);
+  const overviewPose = await worldReady(page, 'overview');
+  assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+  assert.equal(await page.locator(device.form).isVisible(), false);
+  assert.equal(await page.locator(device.otherForm).isVisible(), false);
+  assert.equal(await record(page, id), undefined);
+
+  const {detailPose, overviewScroll} = await selectModel(page, device, touch, true);
   assert.notEqual(detailPose, overviewPose);
   assert.equal(await page.locator('#world-view').textContent(), device.label);
   assert.ok(await page.locator(device.form).isVisible());
@@ -141,11 +154,8 @@ async function exerciseNavigation(page, id, format, device, touch) {
     await page.screenshot({path: join(evidence, 'smartgrid-s3-battery-' + format + '.png'), fullPage: true});
   }
 
-  const back = page.locator('#world-back');
   const button = page.locator('#' + device.button);
-  if (touch) await back.tap();
-  else await back.press('Enter');
-  assert.equal(await worldReady(page, 'overview'), overviewPose);
+  assert.equal(await backToOverview(page, touch), overviewPose);
   assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
   assert.equal(await page.locator(device.form).isVisible(), false);
   assert.equal(await page.evaluate(() => document.activeElement.id), device.button);
@@ -185,20 +195,112 @@ async function exerciseViewport(context, format, touch = false) {
   return results;
 }
 
+function checkpointSummary(page) {
+  return page.evaluate(() => {
+    const text = id => document.getElementById(id).textContent;
+    return {
+      clock: text('clock'),
+      steps: text('steps'),
+      evSchedule: text('plan-ev'),
+      batteryMode: text('plan-battery'),
+      batteryEnergy: text('battery'),
+      evEnergy: text('ev'),
+    };
+  });
+}
+
+async function exerciseCombinedCheckpoint(context, format, touch = false) {
+  const battery = navigationCases.find(device => device.id === 'battery');
+  const charger = navigationCases.find(device => device.id === 'charger-ev');
+  const id = slot('s3-combined-' + format);
+  const page = await context.newPage();
+  let checkpoint, before, overviewPose;
+  try {
+    await ready(page, id);
+    assert.equal(await record(page, id), undefined);
+    overviewPose = await worldReady(page, 'overview');
+
+    for (const [index, device] of [charger, battery].entries()) {
+      await selectModel(page, device, touch);
+      assert.ok(await page.locator(device.form).isVisible());
+      await device.save(page, touch);
+      await revision(page, index + 1);
+      assert.equal(await backToOverview(page, touch), overviewPose);
+    }
+
+    const advance = page.locator('#advance-hour');
+    for (let hour = 0; hour < 12; hour++) {
+      if (touch) await advance.tap();
+      else await advance.click();
+    }
+    await page.locator('#pilot[data-tick="48"]').waitFor();
+    const save = page.getByRole('button', {name: 'Simpan checkpoint'});
+    if (touch) await save.tap();
+    else await save.click();
+    await revision(page, 3);
+    assert.equal(await page.locator('#status').textContent(), 'Checkpoint tersimpan di revisi 3.');
+    checkpoint = await record(page, id);
+    assert.equal(checkpoint.revision, 3);
+    assert.equal(checkpoint.state.tick, 48);
+    assert.deepEqual(checkpoint.state.plan, {...charger.plan, batteryMode: battery.plan.batteryMode});
+    assert.deepEqual(checkpoint.receipts.map(receipt => receipt.result.type), [charger.action, battery.action]);
+    before = await checkpointSummary(page);
+    assert.equal(before.clock, '12:00');
+    assert.equal(before.steps, '48 / 96 langkah');
+    assert.equal(before.evSchedule, charger.text);
+    assert.equal(before.batteryMode, battery.text);
+  } finally {
+    await page.close();
+  }
+
+  const reopened = await context.newPage();
+  try {
+    await ready(reopened, id);
+    await revision(reopened, 3);
+    assert.equal(await reopened.locator('#pilot').getAttribute('data-tick'), '48');
+    assert.equal(await reopened.locator('#status').textContent(), 'Checkpoint revisi 3 dibuka. Waktu dijeda.');
+    assert.equal(await worldReady(reopened, 'overview'), overviewPose);
+    const after = await checkpointSummary(reopened);
+    assert.deepEqual(after, before);
+
+    await selectModel(reopened, charger, touch);
+    assert.equal(await reopened.locator('#ev-start').inputValue(), String(checkpoint.state.plan.startTick));
+    assert.equal(await reopened.locator('#ev-end').inputValue(), String(checkpoint.state.plan.endTick));
+    assert.equal(await backToOverview(reopened, touch), overviewPose);
+    await selectModel(reopened, battery, touch);
+    assert.equal(await reopened.locator('#battery-mode').inputValue(), checkpoint.state.plan.batteryMode);
+    assert.equal(await backToOverview(reopened, touch), overviewPose);
+
+    assert.deepEqual(await checkpointSummary(reopened), before);
+    assert.deepEqual(await record(reopened, id), checkpoint);
+    if (evidence) {
+      await reopened.screenshot({path: join(evidence, 'smartgrid-s3-combined-reopen-' + format + '.png'), fullPage: true});
+    }
+    return {format, viewport: reopened.viewportSize(), database: nameFor(id), revision: checkpoint.revision,
+      tick: checkpoint.state.tick, receipts: checkpoint.receipts.length, ...after};
+  } finally {
+    await reopened.close();
+  }
+}
+
 try {
   const desktop = await browser.newContext({viewport: {width: 1360, height: 900}});
   const errors = [];
   const watch = context => context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
   watch(desktop);
+  const desktopCombined = await exerciseCombinedCheckpoint(desktop, 'desktop');
   const desktopNavigation = await exerciseViewport(desktop, 'desktop');
 
   const mobile = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
   watch(mobile);
+  const portraitCombined = await exerciseCombinedCheckpoint(mobile, 'portrait', true);
   const portraitNavigation = await exerciseViewport(mobile, 'portrait', true);
 
   const landscape = await browser.newContext({viewport: {width: 844, height: 390}, isMobile: true, hasTouch: true});
   watch(landscape);
+  const landscapeCombined = await exerciseCombinedCheckpoint(landscape, 'landscape', true);
   const landscapeNavigation = await exerciseViewport(landscape, 'landscape', true);
+  report.combined = [desktopCombined, portraitCombined, landscapeCombined];
   report.navigation = [...desktopNavigation, ...portraitNavigation, ...landscapeNavigation];
   await landscape.close();
 
@@ -316,10 +418,10 @@ try {
   await unscoped.locator('#pilot[data-phase="blocked"]').waitFor();
   const desktopDatabases = await unscoped.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
   assert.deepEqual(desktopDatabases.sort(), [
-    ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
+    desktopCombined.database, ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
   ].sort());
   const mobileDatabases = await failure.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
-  assert.deepEqual(mobileDatabases.sort(), [...portraitNavigation.map(result => result.database), nameFor(failureId)].sort());
+  assert.deepEqual(mobileDatabases.sort(), [portraitCombined.database, ...portraitNavigation.map(result => result.database), nameFor(failureId)].sort());
   report.isolation = {desktop: desktopDatabases.length, mobile: mobileDatabases.length, unscoped: 'blocked'};
 
   assert.deepEqual(errors, []);
