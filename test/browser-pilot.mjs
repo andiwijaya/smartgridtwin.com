@@ -50,7 +50,6 @@ async function record(page, id) {
 }
 
 async function changeSchedule(page, start, end, touch = false) {
-  if (!await page.locator('#schedule-form').isVisible()) await page.locator('#world-charger').click();
   await page.locator('#ev-start').selectOption(String(start));
   await page.locator('#ev-end').selectOption(String(end));
   const save = page.getByRole('button', {name: 'Simpan jadwal EV'});
@@ -59,40 +58,29 @@ async function changeSchedule(page, start, end, touch = false) {
 }
 
 async function changeBatteryMode(page, mode, touch = false) {
-  if (!await page.locator('#battery-form').isVisible()) await page.locator('#world-battery').click();
   await page.locator('#battery-mode').selectOption(mode);
   const save = page.getByRole('button', {name: 'Simpan mode baterai'});
   if (touch) await save.tap();
   else await save.click();
 }
 
-async function configure(page) {
-  await changeSchedule(page, 44, 64);
-  await revision(page, 1);
-  await page.locator('#world-back').click();
-  await changeBatteryMode(page, 'auto');
-  await revision(page, 2);
-  await page.locator('#world-back').click();
-}
+const battery = {
+  id: 'battery', label: 'Baterai', pin: '#battery-pin', button: 'world-battery',
+  form: '#battery-form', otherForm: '#schedule-form', firstInput: 'battery-mode',
+  summary: '#plan-battery', text: 'Aktif: Isi dari surya, bantu beban',
+  action: 'battery-mode', success: 'Mode baterai tersimpan di revisi 1.',
+  plan: {startTick: 72, endTick: 88, batteryMode: 'auto'},
+  save: (page, touch) => changeBatteryMode(page, 'auto', touch),
+};
 
-const navigationCases = [
-  {
-    id: 'battery', label: 'Baterai', pin: '#battery-pin', button: 'world-battery',
-    form: '#battery-form', otherForm: '#schedule-form', firstInput: 'battery-mode',
-    summary: '#plan-battery', text: 'Aktif: Isi dari surya, bantu beban',
-    action: 'battery-mode', success: 'Mode baterai tersimpan di revisi 1.',
-    plan: {startTick: 72, endTick: 88, batteryMode: 'auto'},
-    save: (page, touch) => changeBatteryMode(page, 'auto', touch),
-  },
-  {
-    id: 'charger-ev', label: 'Charger EV', pin: '#charger-pin', button: 'world-charger',
-    form: '#schedule-form', otherForm: '#battery-form', firstInput: 'ev-start',
-    summary: '#plan-ev', text: 'Aktif 10:30–15:30',
-    action: 'schedule-ev', success: 'Jadwal EV tersimpan di revisi 1.',
-    plan: {startTick: 42, endTick: 62, batteryMode: 'hold'},
-    save: (page, touch) => changeSchedule(page, 42, 62, touch),
-  },
-];
+const charger = {
+  id: 'charger-ev', label: 'Charger EV', pin: '#charger-pin', button: 'world-charger',
+  form: '#schedule-form', otherForm: '#battery-form', firstInput: 'ev-start',
+  summary: '#plan-ev', text: 'Aktif 10:30–15:30',
+  action: 'schedule-ev', success: 'Jadwal EV tersimpan di revisi 1.',
+  plan: {startTick: 42, endTick: 62, batteryMode: 'hold'},
+  save: (page, touch) => changeSchedule(page, 42, 62, touch),
+};
 
 async function selectModel(page, device, touch, checkDrag = false) {
   // The marker identifies where the pointer hits the rendered mesh.
@@ -123,6 +111,17 @@ async function backToOverview(page, touch) {
   if (touch) await back.tap();
   else await back.press('Enter');
   return worldReady(page, 'overview');
+}
+
+async function configure(page) {
+  await selectModel(page, charger, false);
+  await changeSchedule(page, 44, 64);
+  await revision(page, 1);
+  await backToOverview(page, false);
+  await selectModel(page, battery, false);
+  await changeBatteryMode(page, 'auto');
+  await revision(page, 2);
+  await backToOverview(page, false);
 }
 
 async function exerciseNavigation(page, id, format, device, touch) {
@@ -186,7 +185,7 @@ async function exerciseNavigation(page, id, format, device, touch) {
 
 async function exerciseViewport(context, format, touch = false) {
   const results = [];
-  for (const device of navigationCases) {
+  for (const device of [battery, charger]) {
     const page = await context.newPage();
     const id = slot(['s3', device.id, format].join('-'));
     try { results.push(await exerciseNavigation(page, id, format, device, touch)); }
@@ -210,8 +209,6 @@ function checkpointSummary(page) {
 }
 
 async function exerciseCombinedCheckpoint(context, format, touch = false) {
-  const battery = navigationCases.find(device => device.id === 'battery');
-  const charger = navigationCases.find(device => device.id === 'charger-ev');
   const id = slot('s3-combined-' + format);
   const page = await context.newPage();
   let checkpoint, before, overviewPose;
@@ -315,6 +312,7 @@ try {
   await manual.locator('#checkpoint').click();
   await revision(manual, 3);
   const manualSave = await record(manual, manualId);
+  const manualSummary = await checkpointSummary(manual);
   await manual.close();
 
   const autoId = slot('auto');
@@ -326,11 +324,22 @@ try {
   await auto.locator('#checkpoint').click();
   await revision(auto, 3);
   const autoSave = await record(auto, autoId);
+  const autoSummary = await checkpointSummary(auto);
   assert.deepEqual(autoSave.state, manualSave.state);
+  assert.deepEqual(autoSummary, manualSummary);
+  assert.equal(autoSummary.clock, '24:00');
+  assert.deepEqual(autoSave.state.plan, {startTick: 44, endTick: 64, batteryMode: 'auto'});
+  const receiptContents = checkpoint => checkpoint.receipts.map(({actionKey, revision, result}) =>
+    ({actionKey, revision, result}));
+  assert.deepEqual(receiptContents(autoSave), receiptContents(manualSave));
+  assert.deepEqual(autoSave.receipts.map(receipt => receipt.result.type), [charger.action, battery.action]);
   assert.equal(autoSave.state.evWh, 12_000);
   assert.match(await auto.locator('#mission').textContent(), /Puncak impor turun/);
+  if (evidence) await auto.screenshot({path: join(evidence, 'smartgrid-s3-regression-autoplay-96.png'), fullPage: true});
   report.day = {ticks: autoSave.state.tick, evWh: autoSave.state.evWh, ...autoSave.state.totals,
-    baselineLabel: await auto.locator('#baseline').textContent(), manualDb: nameFor(manualId), autoplayDb: nameFor(autoId)};
+    baselineLabel: await auto.locator('#baseline').textContent(), plan: autoSave.state.plan,
+    batteryWh: autoSave.state.batteryWh, receiptsPerSession: autoSave.receipts.length,
+    manualDb: nameFor(manualId), autoplayDb: nameFor(autoId)};
   await auto.close();
 
   const conflictId = slot('conflict');
@@ -340,20 +349,30 @@ try {
   await first.locator('#checkpoint').click();
   await revision(first, 1);
   await ready(second, conflictId);
+  await revision(second, 1);
   await first.bringToFront();
+  await selectModel(first, charger, false);
   await changeSchedule(first, 40, 64);
   await revision(first, 2);
   const winner = await record(first, conflictId);
   await second.bringToFront();
+  await selectModel(second, battery, false);
   await changeBatteryMode(second, 'auto');
   await second.locator('#pilot[data-phase="conflict"]').waitFor();
+  const conflictMessage = await second.locator('#status').textContent();
+  assert.equal(conflictMessage, 'Tab lain sudah menyimpan progres. Muat ulang checkpoint untuk melanjutkan.');
+  assert.equal(await second.locator('#pilot').getAttribute('data-revision'), '1');
+  assert.equal(await second.getByRole('button', {name: 'Simpan mode baterai'}).isEnabled(), false);
   assert.equal(await second.locator('#advance').isEnabled(), false);
   assert.deepEqual(await record(second, conflictId), winner);
+  if (evidence) await second.screenshot({path: join(evidence, 'smartgrid-s3-regression-conflict.png'), fullPage: true});
   await second.locator('#reload').click();
   await revision(second, 2);
   assert.match(await second.locator('#plan-ev').textContent(), /10:00–16:00/);
   assert.equal(await second.locator('#battery-mode').inputValue(), 'hold');
-  report.conflict = {db: nameFor(conflictId), revision: winner.revision, receipts: winner.receipts.length};
+  assert.deepEqual(await record(second, conflictId), winner);
+  report.conflict = {db: nameFor(conflictId), staleRevision: 1, restoredRevision: winner.revision,
+    receipts: winner.receipts.length, notice: conflictMessage};
   await first.close();
   await second.close();
 
@@ -373,25 +392,32 @@ try {
   }, nameFor(failureId));
   const failure = await mobile.newPage();
   await ready(failure, failureId);
-  for (let i = 0; i < 12; i++) await failure.locator('#advance-hour').click();
-  await failure.locator('#checkpoint').click();
+  for (let i = 0; i < 12; i++) await failure.locator('#advance-hour').tap();
+  await failure.locator('#checkpoint').tap();
   await revision(failure, 1);
   const before = await record(failure, failureId);
   assert.equal(before.state.tick, 48);
 
+  await selectModel(failure, charger, true);
   await failure.evaluate(() => { window.qaAbortNextPut = true; });
-  await changeSchedule(failure, 52, 68);
+  await changeSchedule(failure, 52, 68, true);
   await failure.locator('#retry').waitFor();
   const actionId = await failure.evaluate(() => window.qaAbortedAction);
   assert.ok(actionId);
   assert.deepEqual(await record(failure, failureId), before);
+  const failureMessage = await failure.locator('#status').textContent();
+  assert.equal(failureMessage, 'Simpan gagal. Rencana yang sebelumnya tersimpan masih berlaku.');
+  assert.equal(await failure.locator('#pilot').getAttribute('data-revision'), '1');
   assert.match(await failure.locator('#plan-ev').textContent(), /18:00–22:00/);
-  await failure.locator('#retry').click();
+  await failure.locator('#retry').tap();
   await revision(failure, 2);
   const after = await record(failure, failureId);
   assert.deepEqual(after.receipts.map(receipt => receipt.id), [actionId]);
   assert.equal(after.state.tick, 48);
   assert.equal(after.state.plan.startTick, 52);
+  assert.equal(after.state.plan.endTick, 68);
+  assert.equal(await failure.locator('#status').textContent(), 'Jadwal EV tersimpan di revisi 2.');
+  if (evidence) await failure.screenshot({path: join(evidence, 'smartgrid-s3-regression-retry.png'), fullPage: true});
   await failure.reload();
   await revision(failure, 2);
   assert.match(await failure.locator('#steps').textContent(), /48 \/ 96/);
@@ -408,8 +434,8 @@ try {
   }, {database: nameFor(failureId), actionId});
   assert.deepEqual(replay, {same: 'replayed', changed: 'operation-id-reused'});
   assert.deepEqual(await record(failure, failureId), after);
-  report.retry = {db: nameFor(failureId), tick: after.state.tick, revision: after.revision,
-    receipts: after.receipts.length, reusedId: replay.changed, duplicate: replay.same};
+  report.retry = {db: nameFor(failureId), tick: after.state.tick, oldRevision: before.revision, revision: after.revision,
+    receipts: after.receipts.length, reusedId: replay.changed, duplicate: replay.same, notice: failureMessage};
 
   await failure.setViewportSize({width: 844, height: 390});
   assert.equal(await failure.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
