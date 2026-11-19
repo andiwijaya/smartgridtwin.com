@@ -120,17 +120,23 @@ function makeScene() {
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.normalBias = .028;
   scene.add(ambient, sun);
-  return {scene, charger, sun};
+  const devices = [
+    {id: 'charger-ev', model: charger, anchor: new THREE.Vector3(0, 1.06, 0)},
+    {id: 'battery', model: battery, anchor: new THREE.Vector3(0, 1.10, .47)},
+  ];
+  return {scene, devices, sun};
 }
 
-export function mountDiorama({stage, canvas, marker, view, selectCharger, unavailable}) {
+export function mountDiorama({stage, canvas, markers, view, selectDevice, unavailable}) {
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true, powerPreference: 'low-power'});
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
   renderer.setClearColor(0xe8eee4);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
-  const {scene, charger, sun} = makeScene();
+  const {scene, devices, sun} = makeScene();
+  const idByModel = new Map(devices.map(device => [device.model, device.id]));
+  const pins = devices.map(device => ({...device, marker: markers.get(device.id)}));
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 60);
   const direction = new THREE.Vector3(10, 9, 13);
   const target = new THREE.Vector3();
@@ -143,7 +149,7 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
   let aspect = 1;
   let frame = 0;
   let press = null;
-  let picked = false;
+  let picked = null;
   let disposed = false;
 
   function paint() {
@@ -157,9 +163,11 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
     camera.lookAt(target);
     camera.updateProjectionMatrix();
     renderer.render(scene, camera);
-    charger.localToWorld(projected.set(0, 1.06, 0)).project(camera);
-    marker.style.left = (projected.x + 1) * 50 + '%';
-    marker.style.top = (1 - projected.y) * 50 + '%';
+    for (const {model, anchor, marker} of pins) {
+      model.localToWorld(projected.copy(anchor)).project(camera);
+      marker.style.left = (projected.x + 1) * 50 + '%';
+      marker.style.top = (1 - projected.y) * 50 + '%';
+    }
   }
 
   function settle(next) {
@@ -181,7 +189,7 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
   function present(nextView) {
     cancelAnimationFrame(frame);
     objectId = nextView.objectId;
-    marker.hidden = objectId !== null;
+    for (const {marker} of pins) marker.hidden = objectId !== null;
     canvas.style.cursor = '';
     const next = nextView.pose;
     if (reduceMotion.matches) { settle(next); return; }
@@ -204,10 +212,10 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
     frame = requestAnimationFrame(move);
   }
 
-  function hitsCharger(event) {
-    if (objectId !== null) return false;
+  function pickDevice(event) {
+    if (objectId !== null) return null;
     const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return false;
+    if (rect.width === 0 || rect.height === 0) return null;
     pointer.set(
       (event.clientX - rect.left) / rect.width * 2 - 1,
       -(event.clientY - rect.top) / rect.height * 2 + 1,
@@ -215,33 +223,35 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
     ray.setFromCamera(pointer, camera);
     const hit = ray.intersectObjects(scene.children)[0];
     for (let part = hit?.object; part; part = part.parent) {
-      if (part === charger) return true;
+      const id = idByModel.get(part);
+      if (id) return id;
     }
-    return false;
+    return null;
   }
 
   const options = {signal: events.signal};
   canvas.addEventListener('pointerdown', event => {
-    picked = false;
+    picked = null;
     press = event.isPrimary && event.button === 0 ? {id: event.pointerId, x: event.clientX, y: event.clientY} : null;
   }, options);
   canvas.addEventListener('pointermove', event => {
     if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 7) press = null;
-    if (event.pointerType === 'mouse') canvas.style.cursor = hitsCharger(event) ? 'pointer' : '';
+    if (event.pointerType === 'mouse') canvas.style.cursor = pickDevice(event) ? 'pointer' : '';
   }, options);
   canvas.addEventListener('pointerup', event => {
     const previous = press;
     press = null;
     if (previous?.id !== event.pointerId || Math.hypot(event.clientX - previous.x, event.clientY - previous.y) > 7) return;
-    picked = hitsCharger(event);
+    picked = pickDevice(event);
   }, options);
   canvas.addEventListener('click', event => {
     if (!picked) return;
-    picked = false;
+    const id = picked;
+    picked = null;
     event.preventDefault();
-    selectCharger();
+    selectDevice(id);
   }, options);
-  canvas.addEventListener('pointercancel', () => { press = null; picked = false; }, options);
+  canvas.addEventListener('pointercancel', () => { press = null; picked = null; }, options);
   canvas.addEventListener('pointerleave', () => { press = null; canvas.style.cursor = ''; }, options);
   canvas.addEventListener('webglcontextlost', () => { dispose(); unavailable(); }, options);
 
@@ -267,6 +277,6 @@ export function mountDiorama({stage, canvas, marker, view, selectCharger, unavai
   resize();
   settle(pose);
   stage.dataset.renderer = 'ready';
-  marker.hidden = objectId !== null;
+  for (const {marker} of pins) marker.hidden = objectId !== null;
   return {present, dispose};
 }

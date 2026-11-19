@@ -35,10 +35,14 @@
         </div>
         <div id="world-stage" class="world-stage" data-renderer="loading" data-view="overview">
           <canvas id="world-canvas" aria-hidden="true"></canvas>
-          <span id="charger-pin" class="charger-pin" aria-hidden="true" hidden></span>
-          <p id="world-fallback" class="world-fallback" hidden>Diorama 3D tidak tersedia. Pilih Charger EV lewat tombol di bawah.</p>
+          <span id="charger-pin" class="object-pin" aria-hidden="true" hidden></span>
+          <span id="battery-pin" class="object-pin" aria-hidden="true" hidden></span>
+          <p id="world-fallback" class="world-fallback" hidden>Diorama 3D tidak tersedia. Gunakan tombol di bawah untuk memilih perangkat.</p>
         </div>
-        <button id="world-charger" class="world-charger" type="button" aria-controls="schedule-form" aria-expanded="false" disabled>Charger EV</button>
+        <div class="world-objects">
+          <button id="world-charger" class="world-object" type="button" aria-controls="schedule-form" aria-expanded="false" disabled>Charger EV</button>
+          <button id="world-battery" class="world-object" type="button" aria-controls="battery-form" aria-expanded="false" disabled>Baterai</button>
+        </div>
       </section>
 
       <section class="panel operations" aria-labelledby="setup-title">
@@ -50,7 +54,7 @@
           <div class="action">
             <h3>Jadwal EV</h3>
             <p id="plan-ev">Aktif 18:00–22:00</p>
-            <form id="schedule-form" class="schedule-form" hidden>
+            <form id="schedule-form" class="device-form" hidden>
               <div class="clock-fields">
                 <label>Mulai <select id="ev-start" required></select></label>
                 <label>Selesai <select id="ev-end" required></select></label>
@@ -58,12 +62,14 @@
               <button type="submit">Simpan jadwal EV</button>
             </form>
           </div>
-          <form id="battery-form" class="action">
+          <div class="action">
             <h3>Mode baterai</h3>
             <p id="plan-battery">Aktif: Siaga</p>
-            <label>Mode <select id="battery-mode"><option value="hold">Siaga</option><option value="auto">Isi dari surya, bantu beban</option></select></label>
-            <button type="submit">Simpan mode baterai</button>
-          </form>
+            <form id="battery-form" class="device-form" hidden>
+              <label>Mode <select id="battery-mode"><option value="hold">Siaga</option><option value="auto">Isi dari surya, bantu beban</option></select></label>
+              <button type="submit">Simpan mode baterai</button>
+            </form>
+          </div>
         </fieldset>
         <p id="status" class="status" role="status">Membuka database QA…</p>
         <div class="recovery">

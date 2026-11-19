@@ -12,8 +12,18 @@ const power = watts => number.format(watts / 1_000) + ' kW';
 const energy = wh => number.format(wh / 1_000) + ' kWh';
 const modeLabel = mode => mode === 'auto' ? 'Isi dari surya, bantu beban' : 'Siaga';
 const OVERVIEW_POSE = {target: [0, .48, 0], height: 11.4, minWidth: 16.7};
-const CHARGER_POSE = {target: [4.25, .65, 1.42], height: 4.65, minWidth: 6.6};
-const CHARGER_ID = 'charger-ev';
+const DEVICE_VIEWS = {
+  'charger-ev': {
+    label: 'Charger EV',
+    pose: {target: [4.25, .65, 1.42], height: 4.65, minWidth: 6.6},
+    buttonId: 'world-charger', formId: 'schedule-form', inputId: 'ev-start', markerId: 'charger-pin',
+  },
+  battery: {
+    label: 'Baterai',
+    pose: {target: [.03, .72, -2.65], height: 4.3, minWidth: 5.9},
+    buttonId: 'world-battery', formId: 'battery-form', inputId: 'battery-mode', markerId: 'battery-pin',
+  },
+};
 
 const messages = {
   'invalid-schedule': 'Jam selesai harus sesudah jam mulai dan masih berada di depan waktu simulasi.',
@@ -54,9 +64,12 @@ async function boot() {
   const history = get('history');
   const navigation = createDioramaNavigation(OVERVIEW_POSE);
   const stage = get('world-stage');
-  const chargerButton = get('world-charger');
+  const devices = new Map(Object.entries(DEVICE_VIEWS).map(([id, config]) => [id, {
+    label: config.label, pose: config.pose,
+    button: get(config.buttonId), form: get(config.formId), input: get(config.inputId),
+  }]));
+  const markers = new Map(Object.entries(DEVICE_VIEWS).map(([id, config]) => [id, get(config.markerId)]));
   const backButton = get('world-back');
-  const scheduleForm = get('schedule-form');
   let diorama;
   let pageClosed = false;
   let overviewScroll = 0;
@@ -73,20 +86,26 @@ async function boot() {
 
   function renderWorld() {
     const view = navigation.view();
-    const focused = view.objectId === CHARGER_ID;
+    const focused = view.objectId !== null;
     stage.dataset.view = view.objectId ?? 'overview';
-    get('world-view').textContent = focused ? 'Charger EV' : 'Utuh';
-    chargerButton.setAttribute('aria-expanded', String(focused));
-    scheduleForm.hidden = backButton.hidden = !focused;
+    get('world-view').textContent = devices.get(view.objectId)?.label ?? 'Utuh';
+    backButton.hidden = !focused;
+    for (const [id, device] of devices) {
+      const selected = view.objectId === id;
+      device.button.setAttribute('aria-expanded', String(selected));
+      device.button.hidden = focused && !selected;
+      device.form.hidden = !selected;
+    }
     diorama?.present(view);
   }
 
-  function openCharger() {
-    if (!navigation.select(CHARGER_ID, CHARGER_POSE)) return;
+  function openDevice(id) {
+    const device = devices.get(id);
+    if (!device || navigation.view().objectId !== null) return;
+    navigation.select(id, device.pose);
     overviewScroll = window.scrollY;
     renderWorld();
-    const start = get('ev-start');
-    const focus = start.matches(':disabled') ? backButton : start;
+    const focus = device.input.matches(':disabled') ? backButton : device.input;
     focus.focus({preventScroll: true});
     focus.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
@@ -94,7 +113,7 @@ async function boot() {
   function showWorldFallback() {
     stage.dataset.renderer = 'unavailable';
     get('world-canvas').hidden = true;
-    get('charger-pin').hidden = true;
+    for (const marker of markers.values()) marker.hidden = true;
     get('world-fallback').hidden = false;
     diorama = undefined;
   }
@@ -194,7 +213,7 @@ async function boot() {
     render();
   }
 
-  scheduleForm.addEventListener('submit', event => {
+  get('schedule-form').addEventListener('submit', event => {
     event.preventDefault();
     void save({id: crypto.randomUUID(), value: {
       type: 'schedule-ev',
@@ -211,12 +230,13 @@ async function boot() {
   get('checkpoint').addEventListener('click', () => void save(null));
   get('retry').addEventListener('click', () => { if (retry) void save(retry.action); });
   get('reload').addEventListener('click', () => location.reload());
-  chargerButton.addEventListener('click', openCharger);
+  for (const [id, device] of devices) device.button.addEventListener('click', () => openDevice(id));
   backButton.addEventListener('click', () => {
+    const previousDevice = devices.get(navigation.view().objectId);
     if (!navigation.back()) return;
     renderWorld();
     window.scrollTo(0, overviewScroll);
-    chargerButton.focus({preventScroll: true});
+    previousDevice?.button.focus({preventScroll: true});
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) setPlaying(false);
@@ -237,12 +257,12 @@ async function boot() {
   status.textContent = revision === null ? 'Sesi QA baru. Waktu dijeda.' : 'Checkpoint revisi ' + revision + ' dibuka. Waktu dijeda.';
   render();
   renderWorld();
-  chargerButton.disabled = false;
+  for (const device of devices.values()) device.button.disabled = false;
   void import('./diorama.mjs').then(({mountDiorama}) => {
     if (pageClosed) return;
     diorama = mountDiorama({
-      stage, canvas: get('world-canvas'), marker: get('charger-pin'), view: navigation.view(),
-      selectCharger: openCharger, unavailable: showWorldFallback,
+      stage, canvas: get('world-canvas'), markers, view: navigation.view(),
+      selectDevice: openDevice, unavailable: showWorldFallback,
     });
   }).catch(() => { if (!pageClosed) showWorldFallback(); });
 }

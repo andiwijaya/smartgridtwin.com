@@ -58,24 +58,52 @@ async function changeSchedule(page, start, end, touch = false) {
   else await save.click();
 }
 
+async function changeBatteryMode(page, mode, touch = false) {
+  if (!await page.locator('#battery-form').isVisible()) await page.locator('#world-battery').click();
+  await page.locator('#battery-mode').selectOption(mode);
+  const save = page.getByRole('button', {name: 'Simpan mode baterai'});
+  if (touch) await save.tap();
+  else await save.click();
+}
+
 async function configure(page) {
   await changeSchedule(page, 44, 64);
   await revision(page, 1);
   await page.locator('#world-back').click();
-  await page.locator('#battery-mode').selectOption('auto');
-  await page.getByRole('button', {name: 'Simpan mode baterai'}).click();
+  await changeBatteryMode(page, 'auto');
   await revision(page, 2);
+  await page.locator('#world-back').click();
 }
 
-async function exerciseNavigation(page, id, format, touch = false) {
+const navigationCases = [
+  {
+    id: 'battery', label: 'Baterai', pin: '#battery-pin', button: 'world-battery',
+    form: '#battery-form', otherForm: '#schedule-form', firstInput: 'battery-mode',
+    summary: '#plan-battery', text: 'Aktif: Isi dari surya, bantu beban',
+    action: 'battery-mode', success: 'Mode baterai tersimpan di revisi 1.',
+    plan: {startTick: 72, endTick: 88, batteryMode: 'auto'},
+    save: (page, touch) => changeBatteryMode(page, 'auto', touch),
+  },
+  {
+    id: 'charger-ev', label: 'Charger EV', pin: '#charger-pin', button: 'world-charger',
+    form: '#schedule-form', otherForm: '#battery-form', firstInput: 'ev-start',
+    summary: '#plan-ev', text: 'Aktif 10:30–15:30',
+    action: 'schedule-ev', success: 'Jadwal EV tersimpan di revisi 1.',
+    plan: {startTick: 42, endTick: 62, batteryMode: 'hold'},
+    save: (page, touch) => changeSchedule(page, 42, 62, touch),
+  },
+];
+
+async function exerciseNavigation(page, id, format, device, touch) {
   await ready(page, id);
   const overviewPose = await worldReady(page, 'overview');
   assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
-  assert.equal(await page.locator('#schedule-form').isVisible(), false);
+  assert.equal(await page.locator(device.form).isVisible(), false);
+  assert.equal(await page.locator(device.otherForm).isVisible(), false);
   assert.equal(await record(page, id), undefined);
 
-  // The marker tracks the projected center of the real charger mesh.
-  const marker = page.locator('#charger-pin');
+  // The marker identifies where the pointer hits the rendered mesh.
+  const marker = page.locator(device.pin);
   await marker.scrollIntoViewIfNeeded();
   const bounds = await marker.boundingBox();
   assert.ok(bounds);
@@ -92,52 +120,69 @@ async function exerciseNavigation(page, id, format, touch = false) {
     assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
     await page.mouse.click(x, y);
   }
-  const detailPose = await worldReady(page, 'charger-ev');
+  const detailPose = await worldReady(page, device.id);
   assert.notEqual(detailPose, overviewPose);
-  assert.equal(await page.locator('#world-view').textContent(), 'Charger EV');
-  assert.ok(await page.locator('#schedule-form').isVisible());
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'ev-start');
+  assert.equal(await page.locator('#world-view').textContent(), device.label);
+  assert.ok(await page.locator(device.form).isVisible());
+  assert.equal(await page.locator(device.otherForm).isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), device.firstInput);
   assert.equal(await record(page, id), undefined);
 
-  await changeSchedule(page, 42, 62, touch);
+  await device.save(page, touch);
   await revision(page, 1);
-  assert.match(await page.locator('#status').textContent(), /Jadwal EV tersimpan/);
+  assert.equal(await page.locator('#status').textContent(), device.success);
   const saved = await record(page, id);
   assert.equal(saved.revision, 1);
   assert.equal(saved.receipts.length, 1);
-  assert.equal(saved.receipts[0].result.type, 'schedule-ev');
+  assert.equal(saved.receipts[0].result.type, device.action);
   assert.equal(saved.state.tick, 0);
-  assert.deepEqual([saved.state.plan.startTick, saved.state.plan.endTick], [42, 62]);
-  if (evidence && touch) await page.screenshot({path: join(evidence, 'smartgrid-s3-charger-' + format + '.png'), fullPage: true});
+  assert.deepEqual(saved.state.plan, device.plan);
+  if (evidence && device.id === 'battery') {
+    await page.screenshot({path: join(evidence, 'smartgrid-s3-battery-' + format + '.png'), fullPage: true});
+  }
 
   const back = page.locator('#world-back');
+  const button = page.locator('#' + device.button);
   if (touch) await back.tap();
   else await back.press('Enter');
   assert.equal(await worldReady(page, 'overview'), overviewPose);
   assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
-  assert.equal(await page.locator('#schedule-form').isVisible(), false);
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'world-charger');
+  assert.equal(await page.locator(device.form).isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), device.button);
   assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - overviewScroll) <= 1);
-  assert.equal(await page.locator('#world-charger').getAttribute('aria-expanded'), 'false');
-  assert.match(await page.locator('#plan-ev').textContent(), /10:30–15:30/);
+  assert.equal(await button.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator(device.summary).textContent(), device.text);
   assert.deepEqual(await record(page, id), saved);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  if (evidence && !touch) await page.screenshot({path: join(evidence, 'smartgrid-s3-utuh-desktop.png'), fullPage: true});
+  if (evidence && !touch && device.id === 'battery') {
+    await page.screenshot({path: join(evidence, 'smartgrid-s3-battery-utuh-desktop.png'), fullPage: true});
+  }
 
   if (!touch) {
-    await page.locator('#world-charger').press('Enter');
-    assert.equal(await worldReady(page, 'charger-ev'), detailPose);
+    await button.press('Enter');
+    assert.equal(await worldReady(page, device.id), detailPose);
     await page.locator('#world-back').press('Enter');
     assert.equal(await worldReady(page, 'overview'), overviewPose);
   }
   await page.reload();
   await revision(page, 1);
   assert.equal(await worldReady(page, 'overview'), overviewPose);
-  assert.match(await page.locator('#plan-ev').textContent(), /10:30–15:30/);
+  assert.equal(await page.locator(device.summary).textContent(), device.text);
   assert.deepEqual(await record(page, id), saved);
-  return {format, viewport: page.viewportSize(), input: touch ? 'touch' : 'mouse and keyboard',
+  return {device: device.label, format, viewport: page.viewportSize(), input: touch ? 'touch' : 'mouse and keyboard',
     database: nameFor(id), revision: saved.revision, tick: saved.state.tick, receipts: saved.receipts.length,
-    poseRestored: true, schedule: await page.locator('#plan-ev').textContent()};
+    poseRestored: true, plan: saved.state.plan};
+}
+
+async function exerciseViewport(context, format, touch = false) {
+  const results = [];
+  for (const device of navigationCases) {
+    const page = await context.newPage();
+    const id = slot(['s3', device.id, format].join('-'));
+    try { results.push(await exerciseNavigation(page, id, format, device, touch)); }
+    finally { await page.close(); }
+  }
+  return results;
 }
 
 try {
@@ -145,23 +190,16 @@ try {
   const errors = [];
   const watch = context => context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
   watch(desktop);
-  const desktopS3 = slot('s3-desktop');
-  const desktopPage = await desktop.newPage();
-  report.navigation = [await exerciseNavigation(desktopPage, desktopS3, 'desktop')];
-  await desktopPage.close();
+  const desktopNavigation = await exerciseViewport(desktop, 'desktop');
 
   const mobile = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
   watch(mobile);
-  const portraitS3 = slot('s3-portrait');
-  const portrait = await mobile.newPage();
-  report.navigation.push(await exerciseNavigation(portrait, portraitS3, 'portrait', true));
-  await portrait.close();
+  const portraitNavigation = await exerciseViewport(mobile, 'portrait', true);
 
   const landscape = await browser.newContext({viewport: {width: 844, height: 390}, isMobile: true, hasTouch: true});
   watch(landscape);
-  const landscapeS3 = slot('s3-landscape');
-  const landscapePage = await landscape.newPage();
-  report.navigation.push(await exerciseNavigation(landscapePage, landscapeS3, 'landscape', true));
+  const landscapeNavigation = await exerciseViewport(landscape, 'landscape', true);
+  report.navigation = [...desktopNavigation, ...portraitNavigation, ...landscapeNavigation];
   await landscape.close();
 
   const manualId = slot('manual');
@@ -205,8 +243,7 @@ try {
   await revision(first, 2);
   const winner = await record(first, conflictId);
   await second.bringToFront();
-  await second.locator('#battery-mode').selectOption('auto');
-  await second.getByRole('button', {name: 'Simpan mode baterai'}).click();
+  await changeBatteryMode(second, 'auto');
   await second.locator('#pilot[data-phase="conflict"]').waitFor();
   assert.equal(await second.locator('#advance').isEnabled(), false);
   assert.deepEqual(await record(second, conflictId), winner);
@@ -278,9 +315,11 @@ try {
   await unscoped.goto(new URL('/play/', origin).href);
   await unscoped.locator('#pilot[data-phase="blocked"]').waitFor();
   const desktopDatabases = await unscoped.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
-  assert.deepEqual(desktopDatabases.sort(), [desktopS3, manualId, autoId, conflictId].map(nameFor).sort());
+  assert.deepEqual(desktopDatabases.sort(), [
+    ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
+  ].sort());
   const mobileDatabases = await failure.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
-  assert.deepEqual(mobileDatabases.sort(), [portraitS3, failureId].map(nameFor).sort());
+  assert.deepEqual(mobileDatabases.sort(), [...portraitNavigation.map(result => result.database), nameFor(failureId)].sort());
   report.isolation = {desktop: desktopDatabases.length, mobile: mobileDatabases.length, unscoped: 'blocked'};
 
   assert.deepEqual(errors, []);
