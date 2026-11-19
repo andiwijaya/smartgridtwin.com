@@ -35,8 +35,15 @@ jobs:
           cache_dir=$(mktemp -d "$RUNNER_TEMP/common-engine-npm.XXXXXXXX")
           install_log="$RUNNER_TEMP/common-engine-npm-ci.log"
           package_url=$(node -p "require('./package-lock.json').packages['node_modules/@andiwijaya/common-engine'].resolved")
-          npm ci --include=dev --prefer-online --no-audit --no-fund --cache "$cache_dir" --loglevel=http 2>&1 | tee "$install_log"
-          grep -F "GET 200 $package_url" "$install_log"
+          npm ci --include=dev --prefer-online --no-audit --no-fund --cache "$cache_dir" --loglevel=http 2>&1 \
+            | sed -E 's#(https?://[^?[:space:]]+)\?[^[:space:]]+#\1?[redacted]#g' \
+            | tee "$install_log"
+          if ! grep -Fq "GET 200 $package_url" "$install_log" &&
+             ! grep -Eq 'GET 200 https://pkg-npm\.githubusercontent\.com/[^[:space:]]*/common-engine/0\.3\.0/' "$install_log"; then
+            echo 'Expected a successful GitHub Packages tarball download with an empty cache.' >&2
+            exit 1
+          fi
+          echo 'Verified a direct GitHub Packages download of @andiwijaya/common-engine@0.3.0 with an empty npm cache.'
           npm ls @andiwijaya/common-engine@0.3.0 --depth=0
       - name: Run the pilot test suite
         run: |
