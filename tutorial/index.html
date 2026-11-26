@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5ef">
+  <title>Tutorial SmartGridTwin · Cara Memainkan Simulasi Jaringan Listrik</title>
+  <meta name="description" content="Panduan bergambar SmartGridTwin, mulai dari menggerakkan kamera dan merawat PLTA sampai membangun pembangkit, mengatur pasokan, dan membuka wilayah baru.">
+  <link rel="canonical" href="https://smartgridtwin.com/tutorial/">
+  <link rel="stylesheet" href="tutorial.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23243f35'/%3E%3Cpath d='M13 34h12l7-16 6 25 6-9h8' fill='none' stroke='%23d5ea8d' stroke-linecap='round' stroke-linejoin='round' stroke-width='5'/%3E%3C/svg%3E">
+</head>
+<body>
+  <a class="skip-link" href="#mulai">Lewati ke panduan</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../" aria-label="Beranda SmartGridTwin">
+        <span class="brand-mark"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h5l3-7 4 14 3-7h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>SmartGrid<span class="brand-twin">Twin</span></span>
+      </a>
+      <nav aria-label="Navigasi tutorial">
+        <a class="home-link" href="../">Beranda</a>
+        <a class="primary-link" href="../play/">Mulai bermain <span aria-hidden="true">→</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <header class="intro">
+      <p class="eyebrow">Panduan bermain</p>
+      <h1>Tutorial SmartGridTwin</h1>
+      <p>Mulai dengan satu PLTA dan satu kota. Ikuti langkah bergambar ini untuk menjaga pasokan, mengembangkan jaringan, dan memulihkan pembangkit saat terjadi gangguan.</p>
+    </header>
+
+    <div class="guide">
+      <nav class="contents" aria-label="Daftar isi">
+        <p>Daftar isi</p>
+        <ol>
+          <li><a href="#mulai">Mulai dan gerakkan kamera</a></li>
+          <li><a href="#perawatan">Tangani alarm PLTA</a></li>
+          <li><a href="#pelanggan">Terima dan layani pelanggan</a></li>
+          <li><a href="#pembangunan">Bangun pembangkit</a></li>
+          <li><a href="#upgrade">Upgrade kapasitas dan komponen</a></li>
+          <li><a href="#pemulihan">Pulihkan pembangkit yang hancur</a></li>
+          <li><a href="#wilayah">Buka wilayah dan lanjutkan progres</a></li>
+        </ol>
+      </nav>
+
+      <article class="chapters" aria-label="Langkah-langkah tutorial">
+        <section id="mulai" aria-labelledby="judul-mulai">
+          <h2 id="judul-mulai">1. Mulai dan gerakkan kamera</h2>
+          <p>Pilih <strong>Mulai bermain</strong> untuk masuk ke Lembah Arunika. Di baris atas, <strong>Pasokan tersedia</strong> menunjukkan berapa MW yang bisa disalurkan saat ini, <strong>Permintaan</strong> menunjukkan kebutuhan pelanggan, dan <strong>Tersalurkan</strong> menunjukkan daya yang benar-benar mereka terima. Pasokan yang tersalurkan menghasilkan koin setiap jam simulasi.</p>
+          <p class="image-tip">Ketuk screenshot untuk memperbesar. Pilih <strong>Ukuran asli</strong> untuk melihat detail tombol.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot peta awal"><img src="images/peta.webp" width="1264" height="820" decoding="async" alt="Peta awal Lembah Arunika dengan satu PLTA, satu kota, ringkasan daya di atas, dan panel Operasi jaringan di kanan."></button>
+            <figcaption>Awal permainan di Lembah Arunika. PLTA Air Terjun memasok Kota Arunika.</figcaption>
+          </figure>
+          <p>Gunakan tombol <strong>Jeda</strong> saat ingin membaca status atau mengambil keputusan. Tombol <strong>Lanjutkan simulasi</strong> menjalankan waktu kembali. Pilihan <strong>1×</strong>, <strong>2×</strong>, dan <strong>4×</strong> mengubah kecepatan waktu simulasi.</p>
+          <table>
+            <caption>Kontrol kamera</caption>
+            <thead><tr><th scope="col">Aksi</th><th scope="col">Desktop</th><th scope="col">HP</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Pilih objek</th><td>Klik gedung, komponen, atau penanda.</td><td>Ketuk objek atau penanda.</td></tr>
+              <tr><th scope="row">Geser peta</th><td>Seret kanvas atau gunakan tombol panah.</td><td>Geser satu jari.</td></tr>
+              <tr><th scope="row">Putar dan miringkan</th><td>Tahan klik kanan dan seret, atau gunakan <kbd>Shift</kbd> + panah.</td><td>Aktifkan <strong>Putar kamera</strong>, lalu geser satu jari. Ketuk tombol yang sama untuk kembali ke mode geser.</td></tr>
+              <tr><th scope="row">Zoom</th><td>Gulir, cubit di trackpad, atau tekan <kbd>+</kbd> dan <kbd>−</kbd>.</td><td>Cubit dua jari atau ketuk tombol <strong>+</strong> dan <strong>−</strong>.</td></tr>
+              <tr><th scope="row">Kembali ke tampilan awal</th><td>Pilih <strong>Tampilan awal peta</strong> atau tekan <kbd>Home</kbd>.</td><td>Ketuk <strong>Tampilan awal peta</strong>.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="perawatan" aria-labelledby="judul-perawatan">
+          <h2 id="judul-perawatan">2. Tangani alarm PLTA</h2>
+          <ol class="steps">
+            <li>Saat pasokan PLTA turun, pilih pesan <strong>Periksa oli pelumas</strong> di peta. Alarm besar pertama menjeda waktu otomatis.</li>
+            <li>Pilih <strong>Pompa pelumas</strong> dari interior atau daftar komponen. Periksa angka <strong>Kondisi</strong> dan <strong>Oli pelumas</strong>.</li>
+            <li>Pilih <strong>Isi oli</strong>, lalu lanjutkan simulasi. Servis ini memerlukan 24 koin dan satu jam simulasi. Cek kembali kadar oli dan daya saat pekerjaan selesai.</li>
+          </ol>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot servis PLTA"><img src="images/servis.webp" width="1264" height="1218" decoding="async" loading="lazy" alt="Interior PLTA dengan pompa pelumas terpilih, kadar oli 32 persen, dan tombol Isi oli dengan harga 24 koin."></button>
+            <figcaption>Panel Pompa pelumas memperlihatkan gejala dan biaya tindakan sebelum pemain memulai servis.</figcaption>
+          </figure>
+          <p>Gunakan <strong>Perbaiki</strong> untuk memulihkan kondisi komponen. Gunakan <strong>Ganti</strong> untuk mengembalikan kondisi penuh. Pekerjaan memakai koin dan waktu, dan pasokan dapat turun selama servis berlangsung. Tab <strong>Log</strong> mencatat alarm dan pekerjaan yang selesai.</p>
+          <div class="phone-example">
+            <div>
+              <h3>Servis dari HP</h3>
+              <p>Ketuk komponen di peta untuk membuka tindakannya. Pada layar potret, panel operasi muncul di bawah peta. Pada layar lanskap yang lebar, peta dan panel bisa tampil berdampingan.</p>
+            </div>
+            <figure class="shot">
+              <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot servis pada tampilan HP"><img src="images/hp.webp" width="1265" height="712" decoding="async" loading="lazy" alt="Tampilan HP potret yang memperlihatkan interior PLTA di atas dan tombol Isi oli di panel bawah."></button>
+              <figcaption>Inspeksi dan servis pompa pelumas di HP.</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="pelanggan" aria-labelledby="judul-pelanggan">
+          <h2 id="judul-pelanggan">3. Terima dan layani pelanggan</h2>
+          <p>Konsumsi kota bertambah otomatis. Tawaran sambungan dari pabrik, data center, dan kawasan komersial muncul seiring waktu. Saat ada pemberitahuan, buka tab <strong>Pelanggan</strong>. Bandingkan <strong>Permintaan baru</strong> dengan proyeksi <strong>Jika diterima sekarang</strong>, lalu pilih <strong>Terima</strong> atau <strong>Tolak</strong> sebelum waktunya habis.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot tawaran pelanggan"><img src="images/tawaran.webp" width="1264" height="820" decoding="async" loading="lazy" alt="Tab Pelanggan dengan tawaran pabrik, kebutuhan baru, perkiraan kekurangan daya, dan tombol Tolak serta Terima."></button>
+            <figcaption>Proyeksi tawaran memakai pasokan saat ini. Cek kembali cadangan saat permintaan tinggi atau pembangkit diservis.</figcaption>
+          </figure>
+          <p>Setelah menerima tawaran, klik nama pelanggan di peta atau daftar. Atur <strong>Jatah maksimum</strong> ke 25%, 50%, 75%, atau 100% sesuai kondisi jaringan. Centang <strong>Prioritaskan pelanggan ini</strong> agar pelanggan dilayani lebih dulu ketika daya terbatas. Gunakan <strong>Putuskan listrik</strong> untuk menghentikan pasokan dan <strong>Pulihkan 100%</strong> untuk membuka kembali jatah penuh.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot distribusi listrik"><img src="images/distribusi.webp" width="1264" height="849" decoding="async" loading="lazy" alt="Panel distribusi pabrik dengan jatah maksimum 50 persen, jumlah MW tersalurkan, dan kontrol prioritas."></button>
+            <figcaption>Jatah maksimum membatasi daya yang boleh diterima. Jumlah yang benar-benar masuk tetap mengikuti pasokan jaringan.</figcaption>
+          </figure>
+        </section>
+
+        <section id="pembangunan" aria-labelledby="judul-pembangunan">
+          <h2 id="judul-pembangunan">4. Bangun pembangkit</h2>
+          <ol class="steps">
+            <li>Di tab <strong>Jaringan</strong>, pilih <strong>Bangun pembangkit</strong> atau ketuk penanda <strong>+</strong> di peta.</li>
+            <li>Pilih lokasi dan lihat jenis pembangkit yang bisa dibangun di sana. Bandingkan kapasitas, pola produksi, biaya, dan durasi pengerjaan.</li>
+            <li>Pilih <strong>Bangun</strong> dan jalankan simulasi sampai pekerjaan selesai. Pembangkit mulai memasok daya saat statusnya menjadi <strong>Beroperasi</strong>.</li>
+          </ol>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot pembangunan pembangkit"><img src="images/bangun.webp" width="1264" height="894" decoding="async" loading="lazy" alt="Lokasi Padang Timur dengan pilihan PLTS dan PLTB, biaya, kapasitas, serta durasi pembangunan."></button>
+            <figcaption>Padang Timur menyediakan dua pilihan. Lokasi lain bisa menawarkan PLTA atau PLTN.</figcaption>
+          </figure>
+          <p>Di dalam game, <strong>PLTA</strong> menghasilkan pasokan yang relatif stabil, <strong>PLTS</strong> bergantung pada cahaya, <strong>PLTB</strong> mengikuti kondisi angin, dan <strong>PLTN</strong> memberi kapasitas tinggi dengan biaya pembangunan yang lebih besar. Campuran pembangkit menentukan cadangan yang kamu punya ketika produksi salah satu sumber turun.</p>
+        </section>
+
+        <section id="upgrade" aria-labelledby="judul-upgrade">
+          <h2 id="judul-upgrade">5. Upgrade kapasitas dan komponen</h2>
+          <p>Untuk menaikkan kapasitas, buka pembangkit, lalu pilih <strong>Upgrade pembangkit</strong> di bagian <strong>Level berikutnya</strong>. Untuk memperpanjang umur komponen, pilih komponennya lalu tekan <strong>Upgrade</strong>. Upgrade komponen juga memulihkan kondisi. Kedua jenis upgrade bisa mencapai level 3 dan memerlukan koin serta waktu.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot upgrade pembangkit"><img src="images/upgrade.webp" width="1264" height="1218" decoding="async" loading="lazy" alt="Panel PLTA menampilkan tombol Upgrade pada komponen dan tombol Upgrade pembangkit pada bagian Level berikutnya."></button>
+            <figcaption>Di PLTA, kenaikan level pembangkit menambah unit turbin dan kapasitas. Level setiap komponen bisa ditingkatkan secara tersendiri.</figcaption>
+          </figure>
+          <p>Sebelum memulai, periksa cadangan daya. Kapasitas baru tersedia setelah pekerjaan selesai, sementara pasokan bisa berkurang selama pengerjaan.</p>
+        </section>
+
+        <section id="pemulihan" aria-labelledby="judul-pemulihan">
+          <h2 id="judul-pemulihan">6. Pulihkan pembangkit yang hancur</h2>
+          <p>Tangani kondisi kritis sebelum berkembang menjadi kebakaran. Jika pembangkit sudah <strong>Hancur</strong>, buka lokasinya dan pilih <strong>Bangun ulang</strong>. Sambil menunggu pembangunan, gunakan pembangkit yang masih beroperasi untuk memasok pelanggan prioritas.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot pemulihan pembangkit"><img src="images/pemulihan.webp" width="1264" height="820" decoding="async" loading="lazy" alt="PLTA Air Terjun berstatus Hancur dengan pasokan terhenti, biaya pembangunan ulang, dan rincian pinjaman pemulihan."></button>
+            <figcaption>Contoh pemulihan ketika PLTA satu-satunya hancur dan saldo koin kurang.</figcaption>
+          </figure>
+          <p>Jika seluruh pembangkit hancur dan saldo kurang, pembangunan ulang bisa memakai <strong>pinjaman pemulihan</strong>. Setelah listrik kembali tersalurkan, 25% pendapatan dipakai untuk mencicil sampai utang lunas. Cek saldo utang pada ringkasan koin.</p>
+        </section>
+
+        <section id="wilayah" aria-labelledby="judul-wilayah">
+          <h2 id="judul-wilayah">7. Buka wilayah dan lanjutkan progres</h2>
+          <p>Operasikan sedikitnya <strong>dua pembangkit</strong>, sambungkan <strong>dua pelanggan</strong>, dan penuhi setidaknya <strong>90% permintaan selama 16 jam simulasi berturut-turut</strong>. Lihat indikator target di tab <strong>Jaringan</strong>. Setelah target tercapai, buka menu <strong>Wilayah</strong> untuk berpindah dari Lembah Arunika ke Pesisir Bayu, lalu ke Dataran Bara.</p>
+          <figure class="shot">
+            <button type="button" class="shot-link" aria-haspopup="dialog" aria-label="Perbesar screenshot pemilihan wilayah"><img src="images/wilayah.webp" width="1264" height="820" decoding="async" loading="lazy" alt="Dialog Wilayah dengan Lembah Arunika aktif, Pesisir Bayu terbuka, dan Dataran Bara terkunci."></button>
+            <figcaption>Setiap wilayah memiliki jaringan, kondisi awal, dan progres sendiri.</figcaption>
+          </figure>
+          <p>Satu wilayah menampung maksimal enam lokasi pembangkit dan delapan zona pelanggan. Kamu bisa terus merawat dan meng-upgrade wilayah yang sudah penuh. Progres tersimpan otomatis di browser yang sama, termasuk koin, pelanggan, kondisi komponen, pekerjaan yang sedang berjalan, dan wilayah yang sudah terbuka.</p>
+        </section>
+
+        <div class="closing">
+          <a class="primary-link" href="../play/">Buka simulator <span aria-hidden="true">→</span></a>
+        </div>
+      </article>
+    </div>
+  </main>
+  <dialog id="screenshot-viewer" aria-labelledby="screenshot-title">
+    <div class="viewer-header">
+      <h2 id="screenshot-title"></h2>
+      <button id="screenshot-size" type="button" aria-pressed="false">Ukuran asli</button>
+      <form method="dialog"><button type="submit" autofocus>Tutup</button></form>
+    </div>
+    <div class="viewer-scroll" tabindex="0" aria-label="Area screenshot yang dapat digeser">
+      <img id="screenshot-image" alt="">
+    </div>
+  </dialog>
+  <script src="tutorial.js" defer></script>
+</body>
+</html>
