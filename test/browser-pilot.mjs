@@ -1,0 +1,519 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {join} from 'node:path';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import {isPilotOrigin, PROGRESS_DATABASE} from '../play/session.mjs';
+
+const smoke = process.env.SMARTGRID_SMOKE_URL;
+const origin = new URL(smoke ?? process.env.SMARTGRID_QA_URL ?? 'http://127.0.0.1:4192');
+const production = origin.protocol === 'https:' && ['smartgridtwin.com', 'www.smartgridtwin.com'].includes(origin.hostname);
+if (!isPilotOrigin(origin) && !(smoke && production)) throw new Error('Use the SmartGridTwin build or a Pages preview.');
+const runtime = process.env.SMARTGRID_QA_PLAYWRIGHT;
+const {chromium} = await import(runtime ? pathToFileURL(runtime).href : 'playwright');
+const browser = await chromium.launch({
+  executablePath: process.env.SMARTGRID_QA_CHROMIUM,
+  headless: true,
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+});
+const stamp = Date.now().toString(36);
+const slot = name => 'smartgrid-' + name + '-' + stamp;
+const nameFor = id => id === null ? PROGRESS_DATABASE : 'smartgridtwin.qa.microgrid.v1-' + id;
+const locationFor = id => new URL(id === null ? '/microgrid/' : '/microgrid/?qa-session=' + id, origin).href;
+const evidence = process.env.SMARTGRID_QA_EVIDENCE;
+const report = {};
+
+async function ready(page, id) {
+  await page.goto(locationFor(id));
+  assert.equal(page.url(), locationFor(id));
+  await page.locator('#pilot[data-phase="ready"]').waitFor();
+  assert.equal(await page.locator('#qa-slot').isVisible(), id !== null);
+  await page.bringToFront();
+  await worldReady(page, 'overview');
+}
+
+async function worldReady(page, view) {
+  const stage = page.locator('#world-stage[data-renderer="ready"][data-camera-state="settled"][data-view="' + view + '"]');
+  await stage.waitFor();
+  return stage.getAttribute('data-camera-pose');
+}
+
+async function revision(page, n) {
+  await page.locator('#pilot[data-revision="' + n + '"]:not([data-phase="saving"])').waitFor();
+}
+
+async function record(page, id) {
+  return page.evaluate(database => new Promise((resolve, reject) => {
+    const request = indexedDB.open(database, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('checkpoints', 'readonly');
+      const entry = tx.objectStore('checkpoints').get('session');
+      tx.oncomplete = () => { db.close(); resolve(entry.result); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }), nameFor(id));
+}
+
+async function changeSchedule(page, start, end, touch = false) {
+  await page.locator('#ev-start').selectOption(String(start));
+  await page.locator('#ev-end').selectOption(String(end));
+  const save = page.getByRole('button', {name: 'Simpan jadwal EV'});
+  if (touch) await save.tap();
+  else await save.click();
+}
+
+async function changeBatteryMode(page, mode, touch = false) {
+  await page.locator('#battery-mode').selectOption(mode);
+  const save = page.getByRole('button', {name: 'Simpan mode baterai'});
+  if (touch) await save.tap();
+  else await save.click();
+}
+
+const battery = {
+  id: 'battery', label: 'Baterai', pin: '#battery-pin', button: 'world-battery',
+  form: '#battery-form', otherForm: '#schedule-form', firstInput: 'battery-mode',
+  summary: '#plan-battery', text: 'Aktif: Isi dari surya, bantu beban',
+  action: 'battery-mode', success: 'Mode baterai tersimpan di revisi 1.',
+  plan: {startTick: 72, endTick: 88, batteryMode: 'auto'},
+  save: (page, touch) => changeBatteryMode(page, 'auto', touch),
+};
+
+const charger = {
+  id: 'charger-ev', label: 'Charger EV', pin: '#charger-pin', button: 'world-charger',
+  form: '#schedule-form', otherForm: '#battery-form', firstInput: 'ev-start',
+  summary: '#plan-ev', text: 'Aktif 10:30–15:30',
+  action: 'schedule-ev', success: 'Jadwal EV tersimpan di revisi 1.',
+  plan: {startTick: 42, endTick: 62, batteryMode: 'hold'},
+  save: (page, touch) => changeSchedule(page, 42, 62, touch),
+};
+
+async function selectModel(page, device, touch, checkDrag = false) {
+  // The marker identifies where the pointer hits the rendered mesh.
+  const marker = page.locator(device.pin);
+  await marker.scrollIntoViewIfNeeded();
+  const bounds = await marker.boundingBox();
+  assert.ok(bounds);
+  const overviewScroll = await page.evaluate(() => window.scrollY);
+  const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+  if (touch) {
+    await page.touchscreen.tap(x, y);
+  } else {
+    if (checkDrag) {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 20, y);
+      await page.mouse.move(x, y);
+      await page.mouse.up();
+      assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+    }
+    await page.mouse.click(x, y);
+  }
+  return {detailPose: await worldReady(page, device.id), overviewScroll};
+}
+
+async function backToOverview(page, touch) {
+  const back = page.locator('#world-back');
+  if (touch) await back.tap();
+  else await back.press('Enter');
+  return worldReady(page, 'overview');
+}
+
+async function configure(page) {
+  await selectModel(page, charger, false);
+  await changeSchedule(page, 44, 64);
+  await revision(page, 1);
+  await backToOverview(page, false);
+  await selectModel(page, battery, false);
+  await changeBatteryMode(page, 'auto');
+  await revision(page, 2);
+  await backToOverview(page, false);
+}
+
+async function exerciseNavigation(page, id, format, device, touch) {
+  await ready(page, id);
+  const overviewPose = await worldReady(page, 'overview');
+  assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+  assert.equal(await page.locator(device.form).isVisible(), false);
+  assert.equal(await page.locator(device.otherForm).isVisible(), false);
+  assert.equal(await record(page, id), undefined);
+
+  const {detailPose, overviewScroll} = await selectModel(page, device, touch, true);
+  assert.notEqual(detailPose, overviewPose);
+  assert.equal(await page.locator('#world-view').textContent(), device.label);
+  assert.ok(await page.locator(device.form).isVisible());
+  assert.equal(await page.locator(device.otherForm).isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), device.firstInput);
+  assert.equal(await record(page, id), undefined);
+
+  await device.save(page, touch);
+  await revision(page, 1);
+  assert.equal(await page.locator('#status').textContent(), device.success);
+  const saved = await record(page, id);
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.receipts.length, 1);
+  assert.equal(saved.receipts[0].result.type, device.action);
+  assert.equal(saved.state.tick, 0);
+  assert.deepEqual(saved.state.plan, device.plan);
+  if (evidence && device.id === 'battery') {
+    await page.screenshot({path: join(evidence, 'smartgrid-s3-battery-' + format + '.png'), fullPage: true});
+  }
+
+  const button = page.locator('#' + device.button);
+  assert.equal(await backToOverview(page, touch), overviewPose);
+  assert.equal(await page.locator('#world-view').textContent(), 'Utuh');
+  assert.equal(await page.locator(device.form).isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), device.button);
+  assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - overviewScroll) <= 1);
+  assert.equal(await button.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator(device.summary).textContent(), device.text);
+  assert.deepEqual(await record(page, id), saved);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  if (evidence && !touch && device.id === 'battery') {
+    await page.screenshot({path: join(evidence, 'smartgrid-s3-battery-utuh-desktop.png'), fullPage: true});
+  }
+
+  if (!touch) {
+    await button.press('Enter');
+    assert.equal(await worldReady(page, device.id), detailPose);
+    await page.locator('#world-back').press('Enter');
+    assert.equal(await worldReady(page, 'overview'), overviewPose);
+  }
+  await page.reload();
+  await revision(page, 1);
+  assert.equal(await worldReady(page, 'overview'), overviewPose);
+  assert.equal(await page.locator(device.summary).textContent(), device.text);
+  assert.deepEqual(await record(page, id), saved);
+  return {device: device.label, format, viewport: page.viewportSize(), input: touch ? 'touch' : 'mouse and keyboard',
+    database: nameFor(id), revision: saved.revision, tick: saved.state.tick, receipts: saved.receipts.length,
+    poseRestored: true, plan: saved.state.plan};
+}
+
+async function exerciseViewport(context, format, touch = false) {
+  const results = [];
+  for (const device of [battery, charger]) {
+    const page = await context.newPage();
+    const id = slot(['s3', device.id, format].join('-'));
+    try { results.push(await exerciseNavigation(page, id, format, device, touch)); }
+    finally { await page.close(); }
+  }
+  return results;
+}
+
+function checkpointSummary(page) {
+  return page.evaluate(() => {
+    const text = id => document.getElementById(id).textContent;
+    return {
+      clock: text('clock'),
+      steps: text('steps'),
+      evSchedule: text('plan-ev'),
+      batteryMode: text('plan-battery'),
+      batteryEnergy: text('battery'),
+      evEnergy: text('ev'),
+    };
+  });
+}
+
+async function exerciseCombinedCheckpoint(context, format, touch = false, id = slot('s3-combined-' + format)) {
+  const page = await context.newPage();
+  let checkpoint, before, overviewPose;
+  try {
+    await ready(page, id);
+    assert.equal(await record(page, id), undefined);
+    overviewPose = await worldReady(page, 'overview');
+
+    for (const [index, device] of [charger, battery].entries()) {
+      await selectModel(page, device, touch);
+      assert.ok(await page.locator(device.form).isVisible());
+      await device.save(page, touch);
+      await revision(page, index + 1);
+      assert.equal(await backToOverview(page, touch), overviewPose);
+    }
+
+    const advance = page.locator('#advance-hour');
+    for (let hour = 0; hour < 12; hour++) {
+      if (touch) await advance.tap();
+      else await advance.click();
+    }
+    await page.locator('#pilot[data-tick="48"]').waitFor();
+    const save = page.getByRole('button', {name: 'Simpan checkpoint'});
+    if (touch) await save.tap();
+    else await save.click();
+    await revision(page, 3);
+    assert.equal(await page.locator('#status').textContent(), 'Checkpoint tersimpan di revisi 3.');
+    checkpoint = await record(page, id);
+    assert.equal(checkpoint.revision, 3);
+    assert.equal(checkpoint.state.tick, 48);
+    assert.deepEqual(checkpoint.state.plan, {...charger.plan, batteryMode: battery.plan.batteryMode});
+    assert.deepEqual(checkpoint.receipts.map(receipt => receipt.result.type), [charger.action, battery.action]);
+    before = await checkpointSummary(page);
+    assert.equal(before.clock, '12:00');
+    assert.equal(before.steps, '48 / 96 langkah');
+    assert.equal(before.evSchedule, charger.text);
+    assert.equal(before.batteryMode, battery.text);
+  } finally {
+    await page.close();
+  }
+
+  const reopened = await context.newPage();
+  try {
+    await ready(reopened, id);
+    await revision(reopened, 3);
+    assert.equal(await reopened.locator('#pilot').getAttribute('data-tick'), '48');
+    assert.equal(await reopened.locator('#status').textContent(), 'Checkpoint revisi 3 dibuka. Waktu dijeda.');
+    assert.equal(await worldReady(reopened, 'overview'), overviewPose);
+    const after = await checkpointSummary(reopened);
+    assert.deepEqual(after, before);
+
+    await selectModel(reopened, charger, touch);
+    assert.equal(await reopened.locator('#ev-start').inputValue(), String(checkpoint.state.plan.startTick));
+    assert.equal(await reopened.locator('#ev-end').inputValue(), String(checkpoint.state.plan.endTick));
+    assert.equal(await backToOverview(reopened, touch), overviewPose);
+    await selectModel(reopened, battery, touch);
+    assert.equal(await reopened.locator('#battery-mode').inputValue(), checkpoint.state.plan.batteryMode);
+    assert.equal(await backToOverview(reopened, touch), overviewPose);
+
+    assert.deepEqual(await checkpointSummary(reopened), before);
+    assert.deepEqual(await record(reopened, id), checkpoint);
+    if (evidence) {
+      await reopened.screenshot({path: join(evidence, 'smartgrid-s3-combined-reopen-' + format + '.png'), fullPage: true});
+    }
+    return {format, viewport: reopened.viewportSize(), database: nameFor(id), revision: checkpoint.revision,
+      tick: checkpoint.state.tick, receipts: checkpoint.receipts.length, ...after};
+  } finally {
+    await reopened.close();
+  }
+}
+
+async function exerciseRelease() {
+  const devices = [
+    {format: 'desktop', viewport: {width: 1360, height: 900}},
+    {format: 'portrait', viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
+  ];
+  const results = [];
+  for (const {format, ...use} of devices) {
+    const context = await browser.newContext(use);
+    try {
+      if (format === 'desktop') {
+        const page = await context.newPage();
+        await page.goto(new URL('/', origin).href);
+        assert.equal(await page.locator('.play-link').evaluate(link => new URL(link.href).pathname), '/play/');
+        await page.waitForFunction(() => document.querySelector('.promo-preview img')?.naturalWidth > 0);
+        await page.locator('a[href="tutorial/"]').click();
+        assert.match(await page.locator('main h1').textContent(), /Tutorial SmartGridTwin/);
+        await page.goto(new URL('/play/', origin).href);
+        await page.locator('#map-viewport[data-renderer]').waitFor();
+        await page.goto(new URL('/article.html', origin).href);
+        assert.match(await page.locator('article h1').textContent(), /kW vs kWh/);
+        await page.close();
+      }
+      results.push(await exerciseCombinedCheckpoint(context, format, Boolean(use.hasTouch), null));
+    } finally {
+      await context.close();
+    }
+  }
+  console.log(JSON.stringify({homepage: true, tutorial: true, article: true, path: '/microgrid/', profiles: results}, null, 2));
+}
+
+async function exerciseQa() {
+  const desktop = await browser.newContext({viewport: {width: 1360, height: 900}});
+  const errors = [];
+  const watch = context => context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
+  watch(desktop);
+  const desktopCombined = await exerciseCombinedCheckpoint(desktop, 'desktop');
+  const desktopNavigation = await exerciseViewport(desktop, 'desktop');
+
+  const mobile = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
+  watch(mobile);
+  const portraitCombined = await exerciseCombinedCheckpoint(mobile, 'portrait', true);
+  const portraitNavigation = await exerciseViewport(mobile, 'portrait', true);
+
+  const landscape = await browser.newContext({viewport: {width: 844, height: 390}, isMobile: true, hasTouch: true});
+  watch(landscape);
+  const landscapeCombined = await exerciseCombinedCheckpoint(landscape, 'landscape', true);
+  const landscapeNavigation = await exerciseViewport(landscape, 'landscape', true);
+  report.combined = [desktopCombined, portraitCombined, landscapeCombined];
+  report.navigation = [...desktopNavigation, ...portraitNavigation, ...landscapeNavigation];
+  await landscape.close();
+
+  const manualId = slot('manual');
+  const manual = await desktop.newPage();
+  await ready(manual, manualId);
+  await configure(manual);
+  await manual.locator('#advance').click();
+  await manual.locator('#pilot[data-tick="1"]').waitFor();
+  for (let i = 0; i < 24; i++) await manual.locator('#advance-hour').click();
+  await manual.locator('#pilot[data-phase="complete"][data-tick="96"]').waitFor();
+  await manual.locator('#checkpoint').click();
+  await revision(manual, 3);
+  const manualSave = await record(manual, manualId);
+  const manualSummary = await checkpointSummary(manual);
+  await manual.close();
+
+  const autoId = slot('auto');
+  const auto = await desktop.newPage();
+  await ready(auto, autoId);
+  await configure(auto);
+  await auto.locator('#autoplay').click();
+  await auto.locator('#pilot[data-phase="complete"][data-tick="96"]').waitFor({timeout: 30_000});
+  await auto.locator('#checkpoint').click();
+  await revision(auto, 3);
+  const autoSave = await record(auto, autoId);
+  const autoSummary = await checkpointSummary(auto);
+  assert.deepEqual(autoSave.state, manualSave.state);
+  assert.deepEqual(autoSummary, manualSummary);
+  assert.equal(autoSummary.clock, '24:00');
+  assert.deepEqual(autoSave.state.plan, {startTick: 44, endTick: 64, batteryMode: 'auto'});
+  const receiptContents = checkpoint => checkpoint.receipts.map(({actionKey, revision, result}) =>
+    ({actionKey, revision, result}));
+  assert.deepEqual(receiptContents(autoSave), receiptContents(manualSave));
+  assert.deepEqual(autoSave.receipts.map(receipt => receipt.result.type), [charger.action, battery.action]);
+  assert.equal(autoSave.state.evWh, 12_000);
+  assert.match(await auto.locator('#mission').textContent(), /Puncak impor turun/);
+  if (evidence) await auto.screenshot({path: join(evidence, 'smartgrid-s3-regression-autoplay-96.png'), fullPage: true});
+  report.day = {ticks: autoSave.state.tick, evWh: autoSave.state.evWh, ...autoSave.state.totals,
+    baselineLabel: await auto.locator('#baseline').textContent(), plan: autoSave.state.plan,
+    batteryWh: autoSave.state.batteryWh, receiptsPerSession: autoSave.receipts.length,
+    manualDb: nameFor(manualId), autoplayDb: nameFor(autoId)};
+  await auto.close();
+
+  const conflictId = slot('conflict');
+  const first = await desktop.newPage();
+  const second = await desktop.newPage();
+  await ready(first, conflictId);
+  await first.locator('#checkpoint').click();
+  await revision(first, 1);
+  await ready(second, conflictId);
+  await revision(second, 1);
+  await first.bringToFront();
+  await selectModel(first, charger, false);
+  await changeSchedule(first, 40, 64);
+  await revision(first, 2);
+  const winner = await record(first, conflictId);
+  await second.bringToFront();
+  await selectModel(second, battery, false);
+  await changeBatteryMode(second, 'auto');
+  await second.locator('#pilot[data-phase="conflict"]').waitFor();
+  const conflictMessage = await second.locator('#status').textContent();
+  assert.equal(conflictMessage, 'Tab lain sudah menyimpan progres. Muat ulang checkpoint untuk melanjutkan.');
+  assert.equal(await second.locator('#pilot').getAttribute('data-revision'), '1');
+  assert.equal(await second.getByRole('button', {name: 'Simpan mode baterai'}).isEnabled(), false);
+  assert.equal(await second.locator('#advance').isEnabled(), false);
+  assert.deepEqual(await record(second, conflictId), winner);
+  if (evidence) await second.screenshot({path: join(evidence, 'smartgrid-s3-regression-conflict.png'), fullPage: true});
+  await second.locator('#reload').click();
+  await revision(second, 2);
+  assert.match(await second.locator('#plan-ev').textContent(), /10:00–16:00/);
+  assert.equal(await second.locator('#battery-mode').inputValue(), 'hold');
+  assert.deepEqual(await record(second, conflictId), winner);
+  report.conflict = {db: nameFor(conflictId), staleRevision: 1, restoredRevision: winner.revision,
+    receipts: winner.receipts.length, notice: conflictMessage};
+  await first.close();
+  await second.close();
+
+  const failureId = slot('failure');
+  await mobile.addInitScript(database => {
+    const put = IDBObjectStore.prototype.put;
+    window.qaAbortNextPut = false;
+    IDBObjectStore.prototype.put = function (entry, key) {
+      const request = put.call(this, entry, key);
+      if (window.qaAbortNextPut && this.transaction.db.name === database && this.name === 'checkpoints') {
+        window.qaAbortNextPut = false;
+        window.qaAbortedAction = entry.receipts.at(-1)?.id;
+        request.addEventListener('success', () => this.transaction.abort(), {once: true});
+      }
+      return request;
+    };
+  }, nameFor(failureId));
+  const failure = await mobile.newPage();
+  await ready(failure, failureId);
+  for (let i = 0; i < 12; i++) await failure.locator('#advance-hour').tap();
+  await failure.locator('#checkpoint').tap();
+  await revision(failure, 1);
+  const before = await record(failure, failureId);
+  assert.equal(before.state.tick, 48);
+
+  await selectModel(failure, charger, true);
+  await failure.evaluate(() => { window.qaAbortNextPut = true; });
+  await changeSchedule(failure, 52, 68, true);
+  await failure.locator('#retry').waitFor();
+  const actionId = await failure.evaluate(() => window.qaAbortedAction);
+  assert.ok(actionId);
+  assert.deepEqual(await record(failure, failureId), before);
+  const failureMessage = await failure.locator('#status').textContent();
+  assert.equal(failureMessage, 'Simpan gagal. Rencana yang sebelumnya tersimpan masih berlaku.');
+  assert.equal(await failure.locator('#pilot').getAttribute('data-revision'), '1');
+  assert.match(await failure.locator('#plan-ev').textContent(), /18:00–22:00/);
+  await failure.locator('#retry').tap();
+  await revision(failure, 2);
+  const after = await record(failure, failureId);
+  assert.deepEqual(after.receipts.map(receipt => receipt.id), [actionId]);
+  assert.equal(after.state.tick, 48);
+  assert.equal(after.state.plan.startTick, 52);
+  assert.equal(after.state.plan.endTick, 68);
+  assert.equal(await failure.locator('#status').textContent(), 'Jadwal EV tersimpan di revisi 2.');
+  if (evidence) await failure.screenshot({path: join(evidence, 'smartgrid-s3-regression-retry.png'), fullPage: true});
+  await failure.reload();
+  await revision(failure, 2);
+  assert.match(await failure.locator('#steps').textContent(), /48 \/ 96/);
+  assert.match(await failure.locator('#plan-ev').textContent(), /13:00–17:00/);
+  assert.equal(await failure.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+
+  const bridge = await build({
+    stdin: {
+      resolveDir: fileURLToPath(new URL('../', import.meta.url)),
+      contents: `
+        import {createIndexedDbCheckpointStore} from '@andiwijaya/common-engine';
+        import {openGridSession} from './play/session.mjs';
+        window.replayQaOperation = async (database, actionId) => {
+          const session = await openGridSession(createIndexedDbCheckpointStore(indexedDB, database));
+          try {
+            const same = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 52, endTick: 68});
+            const changed = await session.dispatch(actionId, {type: 'schedule-ev', startTick: 56, endTick: 68});
+            return {same: same.status, changed: changed.reason};
+          } finally {
+            session.dispose();
+          }
+        };
+      `,
+    },
+    bundle: true,
+    format: 'iife',
+    write: false,
+  });
+  await failure.addScriptTag({content: bridge.outputFiles[0].text});
+  const replay = await failure.evaluate(({database, id}) => window.replayQaOperation(database, id),
+    {database: nameFor(failureId), id: actionId});
+  assert.deepEqual(replay, {same: 'replayed', changed: 'operation-id-reused'});
+  assert.deepEqual(await record(failure, failureId), after);
+  report.retry = {db: nameFor(failureId), tick: after.state.tick, oldRevision: before.revision, revision: after.revision,
+    receipts: after.receipts.length, reusedId: replay.changed, duplicate: replay.same, notice: failureMessage};
+
+  await failure.setViewportSize({width: 844, height: 390});
+  assert.equal(await failure.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  const ordinary = await desktop.newPage();
+  await ready(ordinary, null);
+  await ordinary.locator('#checkpoint').click();
+  await revision(ordinary, 1);
+  assert.equal((await record(ordinary, null)).state.tick, 0);
+  await ordinary.goto(new URL('/microgrid/?qa-session=bad', origin).href);
+  await ordinary.locator('#pilot[data-phase="blocked"]').waitFor();
+  const desktopDatabases = await ordinary.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
+  assert.deepEqual(desktopDatabases.sort(), [
+    PROGRESS_DATABASE, desktopCombined.database, ...desktopNavigation.map(result => result.database), ...[manualId, autoId, conflictId].map(nameFor),
+  ].sort());
+  const mobileDatabases = await failure.evaluate(async () => (await indexedDB.databases()).map(db => db.name));
+  assert.deepEqual(mobileDatabases.sort(), [portraitCombined.database, ...portraitNavigation.map(result => result.database), nameFor(failureId)].sort());
+  report.isolation = {desktop: desktopDatabases.length, mobile: mobileDatabases.length,
+    ordinaryDatabase: PROGRESS_DATABASE, invalidQaSlot: 'blocked'};
+
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify(report, null, 2));
+}
+
+try {
+  if (smoke) await exerciseRelease();
+  else await exerciseQa();
+} finally {
+  await browser.close();
+}

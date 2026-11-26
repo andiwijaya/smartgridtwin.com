@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmartGridTwin | Simulasi Mikrogrid</title>
+  <meta name="description" content="Atur pengisian kendaraan listrik dan baterai untuk menurunkan puncak impor daya dalam simulasi mikrogrid SmartGridTwin.">
+  <link rel="canonical" href="https://smartgridtwin.com/microgrid/">
+  <link rel="stylesheet" href="./pilot.css">
+  <script type="module" src="./pilot.mjs"></script>
+</head>
+<body>
+  <header class="site-head">
+    <a class="brand" href="/">SmartGrid<span>Twin</span></a>
+    <span id="qa-slot" class="slot" hidden></span>
+  </header>
+  <main id="pilot" data-phase="loading">
+    <header class="intro">
+      <div>
+        <h1>Satu hari di mikrogrid</h1>
+        <p>Atur jam pengisian EV dan mode baterai untuk menurunkan puncak impor. Setiap langkah mewakili 15 menit simulasi.</p>
+      </div>
+      <div class="clock">
+        <span>Waktu simulasi</span>
+        <strong id="clock">00:00</strong>
+        <span id="steps">0 / 96 langkah</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <section class="panel world" aria-labelledby="world-title">
+        <div class="panel-heading">
+          <h2 id="world-title">Diorama mikrogrid</h2>
+          <span id="world-view" class="view-label" role="status">Utuh</span>
+        </div>
+        <div id="world-stage" class="world-stage" data-renderer="loading" data-view="overview">
+          <canvas id="world-canvas" aria-hidden="true"></canvas>
+          <span id="charger-pin" class="object-pin" aria-hidden="true" hidden></span>
+          <span id="battery-pin" class="object-pin" aria-hidden="true" hidden></span>
+          <p id="world-fallback" class="world-fallback" hidden>Diorama 3D tidak tersedia. Gunakan tombol di bawah untuk memilih perangkat.</p>
+        </div>
+        <div class="world-objects">
+          <button id="world-charger" class="world-object" type="button" aria-controls="schedule-form" aria-expanded="false" disabled>Charger EV</button>
+          <button id="world-battery" class="world-object" type="button" aria-controls="battery-form" aria-expanded="false" disabled>Baterai</button>
+        </div>
+      </section>
+
+      <section class="panel operations" aria-labelledby="setup-title">
+        <div class="panel-heading">
+          <h2 id="setup-title">Rencana operasi</h2>
+          <button id="world-back" type="button" hidden>Kembali</button>
+        </div>
+        <fieldset id="edit-controls" disabled>
+          <div class="action">
+            <h3>Jadwal EV</h3>
+            <p id="plan-ev">Aktif 18:00–22:00</p>
+            <form id="schedule-form" class="device-form" hidden>
+              <div class="clock-fields">
+                <label>Mulai <select id="ev-start" required></select></label>
+                <label>Selesai <select id="ev-end" required></select></label>
+              </div>
+              <button type="submit">Simpan jadwal EV</button>
+            </form>
+          </div>
+          <div class="action">
+            <h3>Mode baterai</h3>
+            <p id="plan-battery">Aktif: Siaga</p>
+            <form id="battery-form" class="device-form" hidden>
+              <label>Mode <select id="battery-mode"><option value="hold">Siaga</option><option value="auto">Isi dari surya, bantu beban</option></select></label>
+              <button type="submit">Simpan mode baterai</button>
+            </form>
+          </div>
+        </fieldset>
+        <p id="status" class="status" role="status">Membuka progres…</p>
+        <div class="recovery">
+          <button id="retry" type="button" hidden>Coba lagi simpan</button>
+          <button id="reload" type="button" hidden>Muat ulang checkpoint</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="workspace second">
+      <section class="panel map" aria-labelledby="map-title">
+        <h2 id="map-title">Aliran daya</h2>
+        <p id="interval">Daya dari langkah terakhir muncul setelah simulasi berjalan.</p>
+        <dl class="assets">
+          <div><dt>Panel surya</dt><dd id="solar">0,00 kW</dd></div>
+          <div><dt>Rumah</dt><dd id="house">0,00 kW</dd></div>
+          <div><dt>Jaringan</dt><dd id="grid">0,00 kW</dd></div>
+          <div><dt>Baterai</dt><dd id="battery">2,00 kWh</dd></div>
+          <div><dt>Charger EV</dt><dd id="ev">0,00 kWh</dd></div>
+        </dl>
+        <h3>Energi baterai sepanjang hari</h3>
+        <div id="history" class="history" role="img" aria-label="Grafik energi baterai"></div>
+        <div aria-hidden="true" class="axis"><span>00:00</span><span>12:00</span><span>24:00</span></div>
+      </section>
+      <div class="day-details">
+        <section class="panel summary" aria-labelledby="outcome-title">
+          <h2 id="outcome-title">Hasil hari ini</h2>
+          <dl class="summary-metrics">
+            <div><dt>Puncak impor</dt><dd id="peak">0,00 kW</dd></div>
+            <div><dt>Puncak acuan</dt><dd id="baseline">—</dd></div>
+            <div><dt>Energi impor</dt><dd id="import">0,00 kWh</dd></div>
+            <div><dt>Target EV</dt><dd id="ev-target">0,00 / 12,00 kWh</dd></div>
+          </dl>
+          <p id="mission">Jalankan simulasi untuk melihat hasil dibanding rencana acuan.</p>
+        </section>
+        <section class="panel session" aria-labelledby="session-title">
+          <h2 id="session-title">Kontrol sesi</h2>
+          <fieldset id="time-controls" disabled>
+            <button id="autoplay" type="button" class="primary">Autoplay</button>
+            <button id="advance" type="button">Maju 15 menit</button>
+            <button id="advance-hour" type="button">Maju 1 jam</button>
+            <button id="checkpoint" type="button">Simpan checkpoint</button>
+          </fieldset>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
