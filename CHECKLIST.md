@@ -41,3 +41,4 @@ Pemain mengelola jaringan listrik dari satu PLTA di sungai dengan air terjun. Me
 - [x] Jadikan promo SmartGridTwin satu-satunya konten beranda, dengan pratinjau dunia 3D dan tombol menuju permainan.
 - [x] Verifikasi gambar, tombol, dan pengalihan ke `/play/` di browser internal.
 - [x] Tambahkan tautan ke tutorial bergambar pada beranda dan menu simulator.
+- [x] Sediakan pencarian isi bab dan tautan publik yang bisa disalin dari tutorial.

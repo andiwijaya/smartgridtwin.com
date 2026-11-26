@@ -33,7 +33,30 @@ a:focus-visible { outline: 3px solid #397045; outline-offset: 4px; }
 .intro { border-bottom: 1px solid var(--line); margin-bottom: 27px; padding-bottom: 29px; }
 .eyebrow { margin: 0 0 9px; color: var(--muted); font-size: .72rem; font-weight: 750; text-transform: uppercase; letter-spacing: .14em; }
 .intro h1 { margin: 0; font-size: clamp(2.35rem, 6vw, 4.85rem); line-height: 1.02; letter-spacing: -.073em; }
-.intro > p:last-child { max-width: 56ch; margin: 12px 0 0; color: var(--muted); line-height: 1.55; font-size: clamp(.95rem, 1.6vw, 1.1rem); }
+.intro-summary { max-width: 56ch; margin: 12px 0 0; color: var(--muted); line-height: 1.55; font-size: clamp(.95rem, 1.6vw, 1.1rem); }
+.tutorial-tools { display: grid; grid-template-columns: minmax(0, 500px) minmax(0, 250px); align-items: start; gap: 12px; margin-top: 22px; }
+.tutorial-tools label { display: block; margin-bottom: 6px; font-size: .84rem; font-weight: 750; }
+.tutorial-tools input { width: 100%; min-width: 0; min-height: 44px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: inherit; font: inherit; }
+.tutorial-tools :is(input, summary, button):focus-visible { outline: 3px solid #397045; outline-offset: 3px; }
+.search-field { position: relative; }
+.search-field svg { position: absolute; top: 13px; left: 11px; pointer-events: none; color: var(--muted); }
+.search-field input { padding-left: 38px; }
+.search-results { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.search-results p, .share-panel p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.search-results ul { list-style: none; margin: 0; padding: 0; max-height: 345px; overflow: auto; }
+.search-results li { margin-top: 7px; }
+.search-results a { display: block; padding: 7px 8px; text-decoration: none; border-radius: 6px; font-size: .91rem; font-weight: 740; }
+.search-results a:hover, .search-results a:focus-visible { background: #eaf1e3; outline-offset: -2px; }
+.search-results span { display: block; margin-top: 2px; color: var(--muted); font-size: .81rem; font-weight: 450; line-height: 1.4; }
+.search-results mark { background: #dcebbd; color: inherit; }
+.tutorial-share { margin-top: 22px; }
+.tutorial-share summary, .share-panel button { width: fit-content; min-height: 44px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--accent); font: inherit; font-size: .85rem; font-weight: 740; cursor: pointer; }
+.tutorial-share summary:hover, .share-panel button:hover { background: #eaf1e3; }
+.share-panel { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.share-panel input { font-size: .84rem; }
+.share-panel button { display: block; margin-top: 7px; min-height: 38px; padding-block: 8px; }
+.share-panel button[hidden] { display: none; }
+.share-panel p:not(:empty) { margin-top: 7px; }
 
 .guide { display: grid; grid-template-columns: minmax(190px, 228px) minmax(0, 1fr); align-items: start; gap: clamp(26px, 4.8vw, 65px); }
 .contents { position: sticky; top: 22px; align-self: start; padding: 14px 15px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
@@ -104,4 +127,15 @@ kbd { background: #eaf0e5; border: 1px solid var(--line); border-radius: 3px; pa
   .phone-example figure { width: min(100%, 270px); margin-inline: auto !important; }
   table { font-size: .74rem; }
   th, td { padding: 7px 6px; }
+}
+
+@media (max-width: 540px) {
+  .tutorial-tools { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 16px; }
+  .tutorial-share { margin-top: 0; }
+}
+
+@media (max-width: 365px) {
+  .header-inner { gap: 7px; }
+  .brand { font-size: 17px; }
+  .header-inner .primary-link { gap: 6px; padding-inline: 8px; }
 }
