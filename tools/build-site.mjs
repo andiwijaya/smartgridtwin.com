@@ -1,4 +1,5 @@
 import {build} from 'esbuild';
+import {createHash} from 'node:crypto';
 import {copyFile, mkdir, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {basename, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -28,13 +29,23 @@ const staticFiles = [
   'smartgrid-hero.png', 'robots.txt', 'sitemap.xml',
   'play/index.html', 'play/game.css', 'play/game.mjs', 'play/scene.mjs',
   'play/simulation.mjs', 'play/world.mjs', 'play/territory-preview.webp',
-  'tutorial/index.html', 'tutorial/tutorial.css', 'tutorial/tutorial.js',
+  'tutorial/tutorial.css', 'tutorial/tutorial.js',
   ...['bangun', 'distribusi', 'hp', 'pemulihan', 'peta', 'servis', 'tawaran', 'upgrade', 'wilayah']
     .map(name => 'tutorial/images/' + name + '.webp'),
 ];
 await Promise.all(staticFiles.map(file => copyFile(join(root, file), join(dist, file))));
 await copyFile(join(root, 'play/pilot.css'), join(dist, 'microgrid/pilot.css'));
 await copyFile(join(root, 'node_modules/three/LICENSE'), join(dist, 'microgrid/three-license.txt'));
+
+let tutorial = await readFile(join(root, 'tutorial/index.html'), 'utf8');
+for (const asset of ['tutorial.css', 'tutorial.js']) {
+  const bytes = await readFile(join(root, 'tutorial', asset));
+  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+  const filename = asset.replace('.', '-' + hash + '.');
+  await writeFile(join(dist, 'tutorial', filename), bytes);
+  tutorial = tutorial.replace('"' + asset + '"', '"' + filename + '"');
+}
+await writeFile(join(dist, 'tutorial/index.html'), tutorial);
 
 const result = await build({
   absWorkingDir: root,
